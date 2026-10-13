@@ -3,13 +3,13 @@
 Use these terms consistently in product documents and acceptance criteria.
 Prefer one canonical term for each concept.
 
-Rows below are terms both design documents already use with the same meaning.
-Actors stay in [PERSONAS.md](PERSONAS.md) until the product owner confirms them.
+Rows below are the terms this product uses. A PRD records a term here when it introduces one.
+Actors are confirmed in [PERSONAS.md](PERSONAS.md).
 
 | Term | Meaning | Avoid / related terms |
 | --- | --- | --- |
-| Manifest | The YAML document that is the only source of truth for one diagram. | flow file, source SVG, diagram XML |
-| YAML | The text format of a Manifest. | yml |
+| Manifest | The JSON document that is the only source of truth for one diagram. | flow file, source SVG, diagram XML |
+| JSON | The text format of a Manifest. | YAML, yml |
 | SVG | The generated picture of a Manifest. It is disposable and is not edited as source. | image, render output |
 | Grid | The fixed coordinate system for a diagram. Positions are grid cells. | pixel position, freeform canvas |
 | Node | A labeled box in a Manifest with a stable id, a type, a size, and a grid position. | box |

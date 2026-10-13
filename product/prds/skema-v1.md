@@ -4,26 +4,25 @@
 
 ### Added
 
+- User stories (story 7)
+- Functional requirements (empty start, refused invalid edits)
+- Acceptance criteria (AC-refuse-invalid-edit, AC-empty-start, AC-preserve-svg)
+- Risks and open questions (Q-open-invalid)
+
+### Changed
+
 - Terms
-- Problem
-- Today
-- Users and context
 - Desired outcome and success measures
-- User stories
+- User stories (story 4)
 - Primary journey
 - In scope
-- Out of scope
 - Functional requirements
 - UX and accessibility requirements
 - Data, permissions, and operational requirements
 - Constraints and dependencies
-- Risks and open questions
-- Acceptance criteria
+- Risks and open questions (Q-invalid-edit, Q-stale-svg, and Q-empty-start resolved)
+- Acceptance criteria (AC-invalid-manifest)
 - Definition of done
-
-### Changed
-
-- None
 
 ### Removed
 
@@ -31,7 +30,7 @@
 
 ## Terms
 
-This PRD uses these rows from [the glossary](../GLOSSARY.md): Manifest, YAML, SVG, Grid, Node, Edge, Node type, Node size, Validation, Diagram, Human reviewer, Agent, Editor.
+This PRD uses these rows from [the glossary](../GLOSSARY.md): Manifest, JSON, SVG, Grid, Node, Edge, Node type, Node size, Validation, Diagram, Human reviewer, Agent, Editor.
 
 ## Problem
 
@@ -52,7 +51,7 @@ Both actors work on local files in a workspace. No account, role, or shared-serv
 
 ## Desired outcome and success measures
 
-A Human reviewer can arrange a small Diagram in the Editor, save a Manifest, and review an SVG of that same Diagram. An Agent can change that Manifest and produce a new SVG that shows the change. The same Manifest always produces the same SVG. An invalid Manifest fails with a text explanation and does not become a picture of the invalid content.
+A Human reviewer can start a Diagram in the Editor, arrange it, save a Manifest, and review an SVG of that same Diagram. An Agent can change that Manifest and produce a new SVG that shows the change. The same Manifest always produces the same SVG. An invalid Manifest fails with a text explanation. Validation writes no new SVG and leaves an existing SVG unchanged.
 
 Success means:
 
@@ -60,45 +59,49 @@ Success means:
 - The SVG shows those same Nodes, Edges, and labels.
 - One label, Edge, or Grid-position change is visible in the Manifest and in the SVG.
 - Rendering an unchanged Manifest again produces the same SVG.
-- An invalid Manifest yields a text failure and no SVG of that invalid content.
+- An invalid Manifest yields a text failure, no new SVG, and no change to an existing SVG.
+- The Editor can create the first Manifest, and it never saves an invalid one.
 
 ## User stories
 
 1. A Human reviewer reads a Manifest and understands the Nodes, Edges, labels, and Grid positions without opening an SVG.
 2. An Agent edits a Manifest and produces a new SVG that shows that edit.
 3. A Human reviewer opens the SVG and recognizes the same Nodes, Edges, and labels they read in the Manifest.
-4. An Agent submits an invalid Manifest and gets a clear failure, with no misleading SVG left behind.
+4. An Agent submits an invalid Manifest and gets a clear failure. No new SVG is written, and an existing SVG is left unchanged.
 5. A Human reviewer changes a label, an Edge, or a Grid position and can review a small change in both the Manifest and the SVG.
 6. A Human reviewer arranges a Diagram in the Editor by moving Nodes on the Grid, connecting Edges, and editing labels, and the saved Manifest contains those changes.
+7. A Human reviewer starts a new Diagram in the Editor when no Manifest exists, and the Editor creates a Manifest with no Nodes and no Edges.
 
 ## Primary journey
 
-1. The Human reviewer opens a Manifest in the Editor.
-2. The Human reviewer moves Nodes on the Grid, connects Edges, and edits labels.
-3. The Editor saves the Manifest.
-4. Validation accepts the Manifest.
+1. The Human reviewer creates a new Manifest in the Editor, or opens an existing valid Manifest.
+2. A new Manifest has no Nodes and no Edges and passes Validation.
+3. The Human reviewer moves Nodes on the Grid, connects Edges, and edits labels.
+4. The Editor saves the Manifest only when the result passes Validation.
 5. An SVG is produced from that Manifest.
 6. The Human reviewer reviews the SVG and can match it to the Manifest.
 7. The Agent changes the Manifest as text, Validation accepts it, and a new SVG shows the change.
 
 Alternate path: the Agent creates or edits a Manifest without the Editor, then the Human reviewer reviews the SVG.
 
-Failure path: Validation rejects the Manifest. The actor receives a text failure that names the violated rule and the Manifest location when that location is known. No SVG is written that depicts the invalid Manifest. What happens to an older SVG is [Q-stale-svg](#q-stale-svg).
+Failure path: Validation rejects the Manifest. The actor receives a text failure that names the violated rule and the Manifest location when that location is known. No new SVG is written. An existing SVG is not deleted or modified.
 
-Empty start: whether the Human reviewer can create a Diagram with no existing Manifest is [Q-empty-start](#q-empty-start).
+Editor constraint: a move, connection, Node type, or Node size that would make the Manifest invalid is refused. The saved Manifest stays valid.
 
 ## In scope
 
-- A YAML Manifest as the only source of truth for one Diagram.
+- A JSON Manifest as the only source of truth for one Diagram.
 - Nodes with a stable id, a label, a Grid position, a Node type, and a Node size.
 - Node type values: process, decision, and note.
 - Node size values: small, medium, and large.
 - Edges from one Node to another, with an optional label.
-- Validation that rejects a Manifest before any SVG of that Manifest is written.
+- Validation that rejects a Manifest before any SVG is written.
 - An SVG that matches a valid Manifest and stays the same when the Manifest stays the same.
-- The Editor journey: move Nodes on the Grid, connect Edges, edit labels, and save the Manifest.
+- The Editor journey: start an empty Diagram, move Nodes on the Grid, connect Edges, edit labels, and save a valid Manifest.
 - The Agent journey: edit the Manifest as text and produce an SVG without the Editor.
-- Text failures for malformed YAML, duplicate ids, Edges that do not end on a Node, overlapping Nodes, invalid Grid coordinates, and unsupported Node type or Node size values.
+- Text failures for malformed JSON, duplicate ids, Edges that do not end on a Node, overlapping Nodes, invalid Grid coordinates, and unsupported Node type or Node size values.
+- Refusing Editor changes that would fail Validation, without writing an invalid Manifest.
+- Leaving an existing SVG unchanged when Validation fails.
 
 Assumption carried from both design documents: the Node type and Node size values above are the v1 set.
 
@@ -123,17 +126,20 @@ Assumption carried from the design documents, except the Editor, which this PRD 
 5. The Editor lets the Human reviewer move a Node to a Grid position, connect an Edge between Nodes, and edit a Node or Edge label.
 6. The Editor writes those changes into the Manifest. Grid positions are stored as Grid coordinates.
 7. After a successful Editor save, an SVG can be produced that shows the Diagram the Human reviewer arranged.
-8. Validation rejects malformed YAML, duplicate ids, Edges that do not end on a Node, overlapping Nodes, invalid Grid coordinates, and unsupported Node type or Node size values.
+8. Validation rejects malformed JSON, duplicate ids, Edges that do not end on a Node, overlapping Nodes, invalid Grid coordinates, and unsupported Node type or Node size values.
 9. A rejected Manifest produces a text failure naming the violated rule and the Manifest location when that location is known.
-10. A rejected Manifest does not produce an SVG of the invalid content.
+10. A rejected Manifest does not produce a new SVG. An existing SVG is not deleted or modified.
 11. Opening or saving a Manifest does not run commands contained in the Manifest.
-12. The Editor's response when a move, connection, or size choice would make the Manifest invalid follows [Q-invalid-edit](#q-invalid-edit).
+12. The Editor refuses a move, connection, Node type, or Node size that would make the Manifest invalid. It does not write an invalid Manifest. When a saved Manifest already exists, that file stays as it was.
+13. The Editor can create a new Manifest when none exists. The new Manifest has no Nodes and no Edges and passes Validation.
+14. What the Editor does when asked to open a Manifest that is already invalid follows [Q-open-invalid](#q-open-invalid).
 
 ## UX and accessibility requirements
 
 - The Editor shows the Diagram on a Grid and uses the predefined Node sizes.
 - Node labels and Edge labels are text the Human reviewer can read and edit.
 - Validation failures are text, including when they are raised from the Editor.
+- A refused edit leaves the Diagram unchanged and explains the refusal in text.
 - Assumption for this draft: the Editor is operated with a pointer. Labels and failures are still available as text so the Manifest remains readable without the picture.
 
 ## Data, permissions, and operational requirements
@@ -141,13 +147,15 @@ Assumption carried from the design documents, except the Editor, which this PRD 
 - The Manifest is the only source of truth. The SVG is generated from it.
 - The Human reviewer and the Agent read and write the same Manifest in the workspace.
 - The Editor persists changes by writing the Manifest.
+- The Editor writes a Manifest only when Validation accepts it.
 - No account, network service, or shared permission model is required for the journeys in this PRD.
-- A successful Validation is what allows an SVG to be written.
+- A successful Validation is what allows a new SVG to be written.
+- A failed Validation leaves any existing SVG byte-for-byte unchanged.
 - Local file access is the only data boundary in this PRD.
 
 ## Constraints and dependencies
 
-- The Manifest format is YAML.
+- The Manifest format is JSON.
 - The generated picture is an SVG.
 - There is no existing product behavior to migrate. See [current product state](../CURRENT_PRODUCT_STATE.md).
 - No ticket is attached to this PRD.
@@ -156,32 +164,28 @@ Assumption carried from the design documents, except the Editor, which this PRD 
 ## Risks and open questions
 
 - The Editor and the Agent can drift if they enforce different Validation rules. Both journeys use one Validation outcome.
-- An older SVG can be mistaken for the current Manifest after a failed edit. See [Q-stale-svg](#q-stale-svg).
+- After a failed Validation, the previous SVG can disagree with the Manifest now on disk. The text failure is how the actor knows that SVG is not a picture of the current Manifest. This is the resolved behavior for Q-stale-svg.
 
 ### Q-invalid-edit
 
-When the Human reviewer moves a Node onto another Node, connects an Edge to a Node that is not in the Manifest, or chooses an unsupported Node type or Node size, which behavior is required?
-
-- The Editor refuses the change and leaves the saved Manifest valid.
-- The Editor saves the change and shows the Validation failure.
-
-The design documents describe both prevention in the Editor and rejection by Validation. They do not choose one product behavior.
+Resolved in round 2. The Editor refuses the change and leaves the saved Manifest valid.
 
 ### Q-stale-svg
 
-Story 4 requires no misleading SVG after an invalid Manifest. When an earlier SVG exists and Validation then fails, which behavior is required?
-
-- Leave the earlier SVG unchanged.
-- Remove or replace the earlier SVG so it cannot be read as a picture of the current Manifest.
-
-[brainstorming.md](../../brainstorming.md) says Validation runs before an SVG is created or replaced. That keeps the earlier file on disk.
+Resolved in round 2. Validation writes no new SVG and does not delete or modify an existing SVG.
 
 ### Q-empty-start
 
-The primary journey opens an existing Manifest. Can the Human reviewer also start a new Diagram when no Manifest exists yet?
+Resolved in round 2. The Editor can create a new Manifest when none exists. That Manifest has no Nodes and no Edges.
 
-- Yes. The Editor can create a new Manifest.
-- No. v1 only opens an existing Manifest.
+### Q-open-invalid
+
+When a Manifest already on disk fails Validation, which behavior is required?
+
+- The Editor shows the text failure and does not open the Manifest for editing. The file is corrected as text.
+- The Editor opens the Manifest so the Human reviewer can repair it, and the Editor still refuses to save until the result passes Validation.
+
+Round 2 requires the Editor to make no invalid edits, and story 4 allows an Agent to leave an invalid Manifest on disk. Neither answer says whether the Editor can load that file.
 
 ## Acceptance criteria
 
@@ -190,14 +194,17 @@ The primary journey opens an existing Manifest. Can the Human reviewer also star
 - **AC-svg-matches.** Given a valid Manifest, the SVG shows the same Nodes, Edges, and labels as the Manifest.
 - **AC-deterministic.** Given an unchanged Manifest, two renders produce the same SVG.
 - **AC-editor-roundtrip.** Given a Human reviewer moving a Node on the Grid, connecting an Edge, or editing a label in the Editor, the saved Manifest contains that change and a rendered SVG shows it.
-- **AC-invalid-manifest.** Given a Manifest with malformed YAML, a duplicate id, an Edge that does not end on a Node, overlapping Nodes, an invalid Grid coordinate, or an unsupported Node type or Node size, Validation fails with text that names the rule, and no SVG of that invalid Manifest is written.
+- **AC-invalid-manifest.** Given a Manifest with malformed JSON, a duplicate id, an Edge that does not end on a Node, overlapping Nodes, an invalid Grid coordinate, or an unsupported Node type or Node size, Validation fails with text that names the rule, and no SVG of that invalid Manifest is written.
+- **AC-preserve-svg.** Given an existing SVG and a Manifest that then fails Validation, the existing SVG is still present and unchanged, and no new SVG is written.
 - **AC-reviewable-change.** Given one label, Edge, or Grid-position change, the Manifest and the SVG both show that change.
 - **AC-grid-positions.** Given a Node moved in the Editor, the Manifest records a Grid position for that Node.
 - **AC-no-execution.** Given a Manifest, Validation and rendering do not execute commands from its contents.
+- **AC-refuse-invalid-edit.** Given a move, connection, Node type, or Node size that would fail Validation, the Editor refuses it, explains the refusal in text, and the saved Manifest stays valid.
+- **AC-empty-start.** Given no Manifest, the Human reviewer can create one from the Editor. The new Manifest has no Nodes and no Edges, passes Validation, and renders to an SVG with no Nodes and no Edges.
 
 ## Definition of done
 
-- AC-read-manifest, AC-agent-render, AC-svg-matches, AC-deterministic, AC-editor-roundtrip, AC-invalid-manifest, AC-reviewable-change, AC-grid-positions, and AC-no-execution pass.
-- Q-invalid-edit, Q-stale-svg, and Q-empty-start are resolved, and any acceptance criterion they add is in a later draft.
+- AC-read-manifest, AC-agent-render, AC-svg-matches, AC-deterministic, AC-editor-roundtrip, AC-invalid-manifest, AC-preserve-svg, AC-reviewable-change, AC-grid-positions, AC-no-execution, AC-refuse-invalid-edit, and AC-empty-start pass.
+- Q-open-invalid is resolved, and any acceptance criterion it adds is in a later draft.
 - The Human reviewer and the Agent can each complete their journey on one shared Manifest.
 - Out-of-scope items are not required to call this version done.
