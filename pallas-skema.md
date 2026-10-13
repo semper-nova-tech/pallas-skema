@@ -1,8 +1,8 @@
-# Design Flow
+# Pallas Skema
 
 ## Product brief
 
-Design Flow is an agent-native flow design tool for simple flow charts.
+Pallas Skema is an agent-native flow design tool for simple flow charts.
 
 The goal is:
 
@@ -154,7 +154,7 @@ The product should work well with agentic workflows such as:
 planner → implementer → tests → reviewer → human gate
 ```
 
-It can produce artifacts for workflows such as Lore Flow, where state, control flow, contracts, verification, and recovery are externalized into durable artifacts.
+It can produce artifacts for workflows such as [Pallas Agent Flow](https://github.com/semper-nova-tech/pallas-agent-flow), where state, control flow, contracts, verification, and recovery are externalized into durable artifacts.
 
 The tool should not depend on Cursor CLI being able to connect to a local model. It should produce files and commands that any capable agent can read and modify.
 
@@ -271,7 +271,7 @@ Keep executable behavior out of the visual manifest. If actions are added later,
 
 ## Omarchy integration
 
-Design Flow can be made into an Omarchy plugin.
+Pallas Skema can be made into an Omarchy plugin.
 
 The cleanest design is:
 
@@ -290,7 +290,7 @@ The Rust application remains a normal standalone GUI. The Omarchy plugin install
 The recommended first integration is simple:
 
 ```text
-Omarchy menu → Flow Designer → opens Rust egui app
+Omarchy menu → Pallas Skema → opens Rust egui app
 ```
 
 Deep shell integration can be added later with a Quickshell/QML panel component that displays current diagrams or provides controls. The QML layer would call the Rust binary for operations.
@@ -298,7 +298,7 @@ Deep shell integration can be added later with a Quickshell/QML panel component 
 Do not make the entire egui canvas a Quickshell component unless that complexity becomes necessary. Keep the project in its own repository and install it as an Omarchy plugin, for example:
 
 ```bash
-omarchy plugin add https://github.com/you/flow-designer --enable
+omarchy plugin add https://github.com/semper-nova-tech/pallas-skema --enable
 ```
 
 The plugin layer is for launcher, bar integration, notifications, shell controls, installation, and updates. The Rust application is the actual diagram editor.
@@ -334,7 +334,7 @@ They can generate SVG, but automatic layout does not match the desired restricti
 
 ## Product boundary
 
-Design Flow is a constrained visual editor and artifact generator, not initially a workflow runner.
+Pallas Skema is a constrained visual editor and artifact generator, not initially a workflow runner.
 
 The primary artifact is:
 

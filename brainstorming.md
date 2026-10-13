@@ -1,8 +1,8 @@
-# Design Flow brainstorming and delivery strategy
+# Pallas Skema brainstorming and delivery strategy
 
 ## The problem to solve first
 
-Design Flow is a constrained, agent-native diagram format:
+Pallas Skema is a constrained, agent-native diagram format:
 
 ```text
 YAML manifest → validation → deterministic SVG
@@ -36,7 +36,7 @@ flow validate path/to/flow.yaml
 flow render path/to/flow.yaml --output path/to/flow.svg
 ```
 
-This is the smallest useful product. It makes Design Flow available to people,
+This is the smallest useful product. It makes Pallas Skema available to people,
 agents, CI, desktop clients, IDEs, and web services without coupling the format
 to any one of them.
 
@@ -154,7 +154,7 @@ An Omarchy plugin is a distribution and launcher layer:
 ```text
 Omarchy menu or bar
     ↓
-Design Flow desktop app or CLI command
+Pallas Skema desktop app or CLI command
 ```
 
 It may later expose recent diagrams, launch the local editor, or open an SVG
