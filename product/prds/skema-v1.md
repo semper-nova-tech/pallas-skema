@@ -4,24 +4,14 @@
 
 ### Added
 
-- User stories (story 7)
-- Functional requirements (empty start, refused invalid edits)
-- Acceptance criteria (AC-refuse-invalid-edit, AC-empty-start, AC-preserve-svg)
-- Risks and open questions (Q-open-invalid)
+- Acceptance criteria (AC-repair-invalid)
 
 ### Changed
 
-- Terms
-- Desired outcome and success measures
-- User stories (story 4)
 - Primary journey
-- In scope
-- Functional requirements
+- Functional requirements (requirement 14)
 - UX and accessibility requirements
-- Data, permissions, and operational requirements
-- Constraints and dependencies
-- Risks and open questions (Q-invalid-edit, Q-stale-svg, and Q-empty-start resolved)
-- Acceptance criteria (AC-invalid-manifest)
+- Risks and open questions (Q-open-invalid resolved)
 - Definition of done
 
 ### Removed
@@ -74,7 +64,7 @@ Success means:
 
 ## Primary journey
 
-1. The Human reviewer creates a new Manifest in the Editor, or opens an existing valid Manifest.
+1. The Human reviewer creates a new Manifest in the Editor, or opens an existing Manifest.
 2. A new Manifest has no Nodes and no Edges and passes Validation.
 3. The Human reviewer moves Nodes on the Grid, connects Edges, and edits labels.
 4. The Editor saves the Manifest only when the result passes Validation.
@@ -86,7 +76,9 @@ Alternate path: the Agent creates or edits a Manifest without the Editor, then t
 
 Failure path: Validation rejects the Manifest. The actor receives a text failure that names the violated rule and the Manifest location when that location is known. No new SVG is written. An existing SVG is not deleted or modified.
 
-Editor constraint: a move, connection, Node type, or Node size that would make the Manifest invalid is refused. The saved Manifest stays valid.
+Editor constraint: a move, connection, Node type, or Node size that would make the Manifest invalid is refused. The Editor does not write an invalid Manifest.
+
+Repair path: the Human reviewer opens a Manifest that parses and fails Validation. The Editor shows the Diagram and the text failure. The Editor saves only after Validation passes. A Manifest that does not parse shows the text failure and does not present an editable Diagram. The file on disk stays unchanged until that valid save.
 
 ## In scope
 
@@ -132,7 +124,7 @@ Assumption carried from the design documents, except the Editor, which this PRD 
 11. Opening or saving a Manifest does not run commands contained in the Manifest.
 12. The Editor refuses a move, connection, Node type, or Node size that would make the Manifest invalid. It does not write an invalid Manifest. When a saved Manifest already exists, that file stays as it was.
 13. The Editor can create a new Manifest when none exists. The new Manifest has no Nodes and no Edges and passes Validation.
-14. What the Editor does when asked to open a Manifest that is already invalid follows [Q-open-invalid](#q-open-invalid).
+14. When a Manifest parses and fails Validation, the Editor opens it, shows the text failure, and does not save until Validation passes. When a Manifest does not parse, the Editor shows the text failure and does not present an editable Diagram. The file on disk stays unchanged until a valid save.
 
 ## UX and accessibility requirements
 
@@ -140,6 +132,7 @@ Assumption carried from the design documents, except the Editor, which this PRD 
 - Node labels and Edge labels are text the Human reviewer can read and edit.
 - Validation failures are text, including when they are raised from the Editor.
 - A refused edit leaves the Diagram unchanged and explains the refusal in text.
+- A parseable invalid Manifest opens in the Editor with its text failure visible. An unparseable Manifest shows the text failure and does not present an editable Diagram.
 - Assumption for this draft: the Editor is operated with a pointer. Labels and failures are still available as text so the Manifest remains readable without the picture.
 
 ## Data, permissions, and operational requirements
@@ -185,7 +178,7 @@ When a Manifest already on disk fails Validation, which behavior is required?
 - The Editor shows the text failure and does not open the Manifest for editing. The file is corrected as text.
 - The Editor opens the Manifest so the Human reviewer can repair it, and the Editor still refuses to save until the result passes Validation.
 
-Round 2 requires the Editor to make no invalid edits, and story 4 allows an Agent to leave an invalid Manifest on disk. Neither answer says whether the Editor can load that file.
+Resolved in round 3. The Editor opens a Manifest that parses and fails Validation so the Human reviewer can change it, and it saves only after Validation passes. A Manifest that does not parse shows the text failure and does not present an editable Diagram. The file on disk stays unchanged until a valid save.
 
 ## Acceptance criteria
 
@@ -199,12 +192,12 @@ Round 2 requires the Editor to make no invalid edits, and story 4 allows an Agen
 - **AC-reviewable-change.** Given one label, Edge, or Grid-position change, the Manifest and the SVG both show that change.
 - **AC-grid-positions.** Given a Node moved in the Editor, the Manifest records a Grid position for that Node.
 - **AC-no-execution.** Given a Manifest, Validation and rendering do not execute commands from its contents.
-- **AC-refuse-invalid-edit.** Given a move, connection, Node type, or Node size that would fail Validation, the Editor refuses it, explains the refusal in text, and the saved Manifest stays valid.
+- **AC-refuse-invalid-edit.** Given a move, connection, Node type, or Node size that would fail Validation, the Editor refuses it, explains the refusal in text, and does not write that change. A Manifest that was valid stays valid. A Manifest that was already invalid stays unchanged.
 - **AC-empty-start.** Given no Manifest, the Human reviewer can create one from the Editor. The new Manifest has no Nodes and no Edges, passes Validation, and renders to an SVG with no Nodes and no Edges.
+- **AC-repair-invalid.** Given a Manifest that parses and fails Validation, the Editor opens it, shows the text failure, and does not save until Validation passes. Given a Manifest that does not parse, the Editor shows the text failure and does not present an editable Diagram. The file on disk stays unchanged until a valid save.
 
 ## Definition of done
 
-- AC-read-manifest, AC-agent-render, AC-svg-matches, AC-deterministic, AC-editor-roundtrip, AC-invalid-manifest, AC-preserve-svg, AC-reviewable-change, AC-grid-positions, AC-no-execution, AC-refuse-invalid-edit, and AC-empty-start pass.
-- Q-open-invalid is resolved, and any acceptance criterion it adds is in a later draft.
+- AC-read-manifest, AC-agent-render, AC-svg-matches, AC-deterministic, AC-editor-roundtrip, AC-invalid-manifest, AC-preserve-svg, AC-reviewable-change, AC-grid-positions, AC-no-execution, AC-refuse-invalid-edit, AC-empty-start, and AC-repair-invalid pass.
 - The Human reviewer and the Agent can each complete their journey on one shared Manifest.
 - Out-of-scope items are not required to call this version done.
