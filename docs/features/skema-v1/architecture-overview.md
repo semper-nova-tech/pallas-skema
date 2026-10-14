@@ -10,6 +10,7 @@ Status: planned
 
 - **Fields:** Top-level `nodes` and `edges` arrays. Each Node has stable `id`, `label`, `type`, `size`, and `gridPosition` with integer `x` and `y`. Each Edge has `from` and `to` Node ids and optional `label`.
 - **Invariants:** JSON parses; Node ids unique; Edge endpoints reference existing Node ids; Node `type` ∈ {process, decision, note}; Node `size` ∈ {small, medium, large}; Grid coordinates are non-negative integers with no upper bound; at most one Node per Grid cell (overlap rejected).
+- **Implementation (PR-01):** `skema-core` crate modules `manifest` and `grid`; `parse_manifest` / `serialize_manifest` for JSON (`application/json`).
 
 ## Validation (contract)
 
@@ -17,6 +18,7 @@ Status: planned
 - **Input:** Manifest JSON text (file path or buffer)
 - **Output:** Success, or Text failure naming the violated rule and Manifest location when known
 - **Side effects:** None on SVG; does not execute Manifest content
+- **Implementation (PR-01):** `skema-core::validation::validate_manifest`; Text failure via `format_text_failure`.
 
 ## Render (contract)
 
@@ -24,6 +26,7 @@ Status: planned
 - **Input:** Manifest that has passed Validation (same rules as Validation contract)
 - **Output:** SVG bytes written to the requested path
 - **Invariants:** Same valid Manifest → identical SVG bytes; no execution of Manifest content
+- **Implementation (PR-01):** `skema-core::render::render_manifest` runs Validation first, then writes `image/svg+xml` bytes; failed Validation leaves an existing SVG file unchanged.
 
 ## Editor launch (contract)
 
