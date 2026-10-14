@@ -30,3 +30,4 @@ rustc-ice-*.txt
 skema-editor/node_modules/
 skema-editor/dist/
 .skema-editor-tmp/
+.skema-editor-int/
