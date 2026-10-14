@@ -1,13 +1,9 @@
-import {
-  applyNodeGridMove,
-  createEmptySession,
-  loadManifest,
-  refuseInvalidEdit,
-  saveManifest,
-  showTextFailure,
-  type EditorJsonHandoff,
-  type SkemaTransport,
-} from './index';
+import { applyConnectEdge, applyNodeGridMove } from './apply-edit';
+import type { EditorSession } from './editor-session.types';
+import { createEmptySession, loadManifest } from './load-manifest';
+import { refuseInvalidEdit, showTextFailure, saveManifest } from './index';
+import type { EditorJsonHandoff } from './manifest.types';
+import type { SkemaTransport } from './skema-transport';
 
 function mockTransport(validateResults: Array<{ ok: boolean; textFailure?: string }>): SkemaTransport {
   let call = 0;
@@ -89,6 +85,48 @@ describe('Editor session (STATE-editor-manifest-lifecycle)', () => {
     const refused = await applyNodeGridMove(base, mockTransport([{ ok: false, textFailure: 'overlap' }]), 'b', 0, 0);
     expect(refused.textFailure).toBe('overlap');
     expect(refused.manifest?.nodes.find((n) => n.id === 'b')?.gridPosition).toEqual({ x: 1, y: 0 });
+  });
+
+  it('persists Edge on save (BEHAVIOR-editor-roundtrip)', async () => {
+    let written = '';
+    const manifest = {
+      nodes: [
+        { id: 'a', label: 'a', type: 'process' as const, size: 'medium' as const, gridPosition: { x: 0, y: 0 } },
+        { id: 'b', label: 'b', type: 'process' as const, size: 'medium' as const, gridPosition: { x: 2, y: 0 } },
+      ],
+      edges: [] as { from: string; to: string }[],
+    };
+    let session: EditorSession = {
+      manifestPath: '/w/m.json',
+      svgPath: '/w/m.svg',
+      manifest,
+      manifestJson: JSON.stringify(manifest),
+      lifecycleState: 'ValidEditing',
+      textFailure: null,
+      diagramVisible: true,
+    };
+    session = await applyConnectEdge(session, mockTransport([{ ok: true }]), 'a', 'b');
+    expect(session.manifest?.edges).toEqual([{ from: 'a', to: 'b' }]);
+
+    const transport: SkemaTransport = {
+      async validateManifestFile() {
+        return { ok: true };
+      },
+      async renderManifest() {
+        return { ok: true };
+      },
+      async writeManifestFile(_path, json) {
+        written = json;
+      },
+      async writeTempManifest(json) {
+        return `/tmp/t-${json.length}.json`;
+      },
+      async removeTempFile() {},
+    };
+    const saved = await saveManifest(session, transport);
+    expect(saved.lifecycleState).toBe('ValidSaved');
+    expect(written).toContain('"from": "a"');
+    expect(written).toContain('"to": "b"');
   });
 
   it('blocks save when Validation fails and does not render', async () => {

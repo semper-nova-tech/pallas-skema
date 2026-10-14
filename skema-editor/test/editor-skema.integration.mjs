@@ -22,8 +22,8 @@ function runSkema(args) {
   });
 }
 
-test('AC-empty-start: empty Manifest validates and renders', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'skema-ac-empty-'));
+test('CLI: empty Manifest validates and renders', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'skema-cli-empty-'));
   const manifestPath = path.join(dir, 'manifest.json');
   const svgPath = path.join(dir, 'diagram.svg');
   await fs.writeFile(manifestPath, '{"nodes":[],"edges":[]}\n', 'utf8');
@@ -35,8 +35,8 @@ test('AC-empty-start: empty Manifest validates and renders', async () => {
   assert.match(svg, /<svg/);
 });
 
-test('AC-refuse-invalid-edit: overlapping Nodes fail Validation', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'skema-ac-refuse-'));
+test('CLI: overlapping Nodes fail Validation', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'skema-cli-refuse-'));
   const manifestPath = path.join(dir, 'manifest.json');
   const body = {
     nodes: [

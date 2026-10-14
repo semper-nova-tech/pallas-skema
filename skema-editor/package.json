@@ -7,7 +7,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "CHROME_BIN=${CHROME_BIN:-/usr/bin/chromium} ng test --no-watch --browsers=ChromeHeadless",
-    "test:integration": "node --test test/editor-skema.integration.mjs",
+    "test:integration": "node --test test/editor-skema.integration.mjs && tsx --test test/editor-bridge.integration.ts",
     "start:bridge": "node server/skema-bridge.mjs"
   },
   "private": true,
@@ -41,6 +41,7 @@
     "karma-jasmine-html-reporter": "~2.1.0",
     "postcss": "^8.5.30",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "~5.7.2"
   }
 }

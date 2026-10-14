@@ -23,15 +23,6 @@ export async function applyNodeGridMove(
   const previousManifest = session.manifest;
   const previousJson = session.manifestJson;
 
-  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0) {
-    return refuseInvalidEdit(
-      session,
-      previousManifest,
-      previousJson,
-      `invalid Grid coordinate (${x}, ${y}): coordinates must be non-negative integers`,
-    );
-  }
-
   const next = cloneManifest(session.manifest);
   const node = next.nodes.find((n) => n.id === nodeId);
   if (!node) {
@@ -83,6 +74,41 @@ export function applyNodeLabelEdit(
     manifest: next,
     manifestJson: serializeManifest(next),
     lifecycleState: session.lifecycleState === 'ValidEmpty' ? 'ValidEditing' : session.lifecycleState,
+    textFailure: null,
+  };
+}
+
+/** Connect an Edge between two Nodes; Validation runs via Rust before the edit sticks. */
+export async function applyConnectEdge(
+  session: EditorSession,
+  transport: SkemaTransport,
+  fromId: string,
+  toId: string,
+): Promise<EditorSession> {
+  if (!session.manifest || !session.diagramVisible) {
+    return session;
+  }
+
+  const previousManifest = session.manifest;
+  const previousJson = session.manifestJson;
+
+  const next = cloneManifest(session.manifest);
+  next.edges.push({ from: fromId, to: toId });
+
+  const candidateJson = serializeManifest(next);
+  const tempPath = await transport.writeTempManifest(candidateJson);
+  const validation = await transport.validateManifestFile(tempPath);
+  await transport.removeTempFile(tempPath);
+
+  if (!validation.ok) {
+    return refuseInvalidEdit(session, previousManifest, previousJson, validation.textFailure);
+  }
+
+  return {
+    ...session,
+    manifest: next,
+    manifestJson: candidateJson,
+    lifecycleState: 'ValidEditing',
     textFailure: null,
   };
 }

@@ -5,15 +5,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import {
-  addNodeAt,
-  applyNodeGridMove,
-  applyNodeLabelEdit,
-  loadManifest,
-  saveManifest,
-  type EditorJsonHandoff,
-  type EditorSession,
-} from '../../editor';
+import { MatSelectModule } from '@angular/material/select';
+import { loadManifest, saveManifest, type EditorSession } from '../../editor';
+import { applyConnectEdge, applyNodeGridMove, applyNodeLabelEdit, addNodeAt } from '../../editor/apply-edit';
+import type { EditorJsonHandoff } from '../../editor/manifest.types';
 import { SkemaApiService } from '../skema-api.service';
 
 const CELL_PX = 48;
@@ -21,7 +16,7 @@ const CELL_PX = 48;
 @Component({
   selector: 'app-editor-page',
   standalone: true,
-  imports: [MatToolbarModule, MatButtonModule, MatFormFieldModule, MatInputModule],
+  imports: [MatToolbarModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
   templateUrl: './editor-page.component.html',
   styleUrl: './editor-page.component.scss',
 })
@@ -31,6 +26,7 @@ export class EditorPageComponent implements OnInit {
 
   readonly session = signal<EditorSession | null>(null);
   readonly selectedNodeId = signal<string | null>(null);
+  readonly edgeTargetId = signal<string | null>(null);
   readonly statusMessage = signal<string>('Loading handoff…');
 
   ngOnInit(): void {
@@ -59,8 +55,18 @@ export class EditorPageComponent implements OnInit {
     };
   }
 
+  otherNodeIds(): string[] {
+    const current = this.session();
+    const selected = this.selectedNodeId();
+    if (!current?.manifest || !selected) {
+      return [];
+    }
+    return current.manifest.nodes.filter((n) => n.id !== selected).map((n) => n.id);
+  }
+
   selectNode(id: string): void {
     this.selectedNodeId.set(id);
+    this.edgeTargetId.set(null);
   }
 
   async moveSelected(dx: number, dy: number): Promise<void> {
@@ -82,6 +88,18 @@ export class EditorPageComponent implements OnInit {
     );
     this.session.set(next);
     this.statusMessage.set(next.textFailure ?? `State: ${next.lifecycleState}`);
+  }
+
+  async connectEdge(): Promise<void> {
+    const current = this.session();
+    const fromId = this.selectedNodeId();
+    const toId = this.edgeTargetId();
+    if (!current || !fromId || !toId) {
+      return;
+    }
+    const next = await applyConnectEdge(current, this.transport, fromId, toId);
+    this.session.set(next);
+    this.statusMessage.set(next.textFailure ?? 'Edge connected');
   }
 
   onLabelInput(event: Event): void {

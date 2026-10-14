@@ -50,7 +50,7 @@ importers:
     devDependencies:
       '@angular-devkit/build-angular':
         specifier: ^19.2.27
-        version: 19.2.27(@angular/compiler-cli@19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3))(@angular/compiler@19.2.25)(@types/node@26.6.5)(chokidar@4.0.3)(debug@4.4.3(supports-color@8.1.1))(jiti@1.21.7)(karma@6.4.4(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1))(lightningcss@1.32.0)(supports-color@8.1.1)(tailwindcss@4.3.3)(typescript@5.7.3)(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0))
+        version: 19.2.27(@angular/compiler-cli@19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3))(@angular/compiler@19.2.25)(@types/node@26.6.5)(chokidar@4.0.3)(debug@4.4.3(supports-color@8.1.1))(jiti@1.21.7)(karma@6.4.4(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1))(lightningcss@1.32.0)(supports-color@8.1.1)(tailwindcss@4.3.3)(tsx@4.23.15)(typescript@5.7.3)(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)(tsx@4.23.15))
       '@angular/cli':
         specifier: ^19.2.27
         version: 19.2.27(@types/node@26.6.5)(chokidar@4.0.3)(supports-color@8.1.1)
@@ -90,6 +90,9 @@ importers:
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
       typescript:
         specifier: ~5.7.2
         version: 5.7.3
@@ -4480,6 +4483,11 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  tsx@4.23.15:
+    resolution: {integrity: sha512-Yiex1Ovn8z2xPpOWckIiysV1SSyRMY9BkLF++q0yKiDxCqRhosKfMg3janKkiLBwZ5c/YryloKwGZcrEmtwxKw==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
   tuf-js@3.1.0:
     resolution: {integrity: sha512-3T3T04WzowbwV2FDiGXBbr81t64g1MUGGJRgT4x5o97N+8ArdhVCAF9IxFrxuSJmM3E5Asn7nKHkao0ibcZXAg==}
     engines: {node: ^18.17.0 || >=20.5.0}
@@ -4808,13 +4816,13 @@ snapshots:
     transitivePeerDependencies:
       - chokidar
 
-  '@angular-devkit/build-angular@19.2.27(@angular/compiler-cli@19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3))(@angular/compiler@19.2.25)(@types/node@26.6.5)(chokidar@4.0.3)(debug@4.4.3(supports-color@8.1.1))(jiti@1.21.7)(karma@6.4.4(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1))(lightningcss@1.32.0)(supports-color@8.1.1)(tailwindcss@4.3.3)(typescript@5.7.3)(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0))':
+  '@angular-devkit/build-angular@19.2.27(@angular/compiler-cli@19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3))(@angular/compiler@19.2.25)(@types/node@26.6.5)(chokidar@4.0.3)(debug@4.4.3(supports-color@8.1.1))(jiti@1.21.7)(karma@6.4.4(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1))(lightningcss@1.32.0)(supports-color@8.1.1)(tailwindcss@4.3.3)(tsx@4.23.15)(typescript@5.7.3)(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)(tsx@4.23.15))':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@angular-devkit/architect': 0.1902.27(chokidar@4.0.3)
       '@angular-devkit/build-webpack': 0.1902.27(chokidar@4.0.3)(webpack-dev-server@5.2.2(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)(webpack@5.105.0(esbuild@0.28.0)(lightningcss@1.32.0)(postcss@8.5.12)))(webpack@5.105.0(esbuild@0.28.0)(lightningcss@1.32.0)(postcss@8.5.12))
       '@angular-devkit/core': 19.2.27(chokidar@4.0.3)
-      '@angular/build': 19.2.27(@angular/compiler-cli@19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3))(@angular/compiler@19.2.25)(@types/node@26.6.5)(chokidar@4.0.3)(jiti@1.21.7)(karma@6.4.4(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1))(less@4.2.2)(lightningcss@1.32.0)(postcss@8.5.12)(supports-color@8.1.1)(tailwindcss@4.3.3)(terser@5.39.0)(typescript@5.7.3)
+      '@angular/build': 19.2.27(@angular/compiler-cli@19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3))(@angular/compiler@19.2.25)(@types/node@26.6.5)(chokidar@4.0.3)(jiti@1.21.7)(karma@6.4.4(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1))(less@4.2.2)(lightningcss@1.32.0)(postcss@8.5.12)(supports-color@8.1.1)(tailwindcss@4.3.3)(terser@5.39.0)(tsx@4.23.15)(typescript@5.7.3)
       '@angular/compiler-cli': 19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3)
       '@babel/core': 7.26.10(supports-color@8.1.1)
       '@babel/generator': 7.26.10
@@ -4827,7 +4835,7 @@ snapshots:
       '@babel/runtime': 7.26.10
       '@discoveryjs/json-ext': 0.6.3
       '@ngtools/webpack': 19.2.27(@angular/compiler-cli@19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3))(typescript@5.7.3)(webpack@5.105.0(esbuild@0.28.0)(lightningcss@1.32.0)(postcss@8.5.12))
-      '@vitejs/plugin-basic-ssl': 1.2.0(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0))
+      '@vitejs/plugin-basic-ssl': 1.2.0(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)(tsx@4.23.15))
       ansi-colors: 4.1.3
       autoprefixer: 10.4.20(postcss@8.5.12)
       babel-loader: 9.2.1(@babel/core@7.26.10(supports-color@8.1.1))(webpack@5.105.0(esbuild@0.28.0)(lightningcss@1.32.0)(postcss@8.5.12))
@@ -4937,7 +4945,7 @@ snapshots:
       '@angular/core': 19.2.25(rxjs@7.8.2)(zone.js@0.15.1)
       tslib: 2.8.1
 
-  '@angular/build@19.2.27(@angular/compiler-cli@19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3))(@angular/compiler@19.2.25)(@types/node@26.6.5)(chokidar@4.0.3)(jiti@1.21.7)(karma@6.4.4(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1))(less@4.2.2)(lightningcss@1.32.0)(postcss@8.5.12)(supports-color@8.1.1)(tailwindcss@4.3.3)(terser@5.39.0)(typescript@5.7.3)':
+  '@angular/build@19.2.27(@angular/compiler-cli@19.2.25(@angular/compiler@19.2.25)(supports-color@8.1.1)(typescript@5.7.3))(@angular/compiler@19.2.25)(@types/node@26.6.5)(chokidar@4.0.3)(jiti@1.21.7)(karma@6.4.4(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1))(less@4.2.2)(lightningcss@1.32.0)(postcss@8.5.12)(supports-color@8.1.1)(tailwindcss@4.3.3)(terser@5.39.0)(tsx@4.23.15)(typescript@5.7.3)':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@angular-devkit/architect': 0.1902.27(chokidar@4.0.3)
@@ -4948,7 +4956,7 @@ snapshots:
       '@babel/helper-split-export-declaration': 7.24.7
       '@babel/plugin-syntax-import-attributes': 7.26.0(@babel/core@7.26.10(supports-color@8.1.1))
       '@inquirer/confirm': 5.1.6(@types/node@26.6.5)
-      '@vitejs/plugin-basic-ssl': 1.2.0(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0))
+      '@vitejs/plugin-basic-ssl': 1.2.0(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)(tsx@4.23.15))
       beasties: 0.3.2
       browserslist: 4.29.3
       esbuild: 0.28.0
@@ -4967,7 +4975,7 @@ snapshots:
       source-map-support: 0.5.21
       tslib: 2.8.1
       typescript: 5.7.3
-      vite: 6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)
+      vite: 6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)(tsx@4.23.15)
       watchpack: 2.4.2
     optionalDependencies:
       karma: 6.4.4(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
@@ -6844,9 +6852,9 @@ snapshots:
     dependencies:
       '@types/node': 26.6.5
 
-  '@vitejs/plugin-basic-ssl@1.2.0(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0))':
+  '@vitejs/plugin-basic-ssl@1.2.0(vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)(tsx@4.23.15))':
     dependencies:
-      vite: 6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)
+      vite: 6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)(tsx@4.23.15)
 
   '@webassemblyjs/ast@1.14.1':
     dependencies:
@@ -9417,6 +9425,12 @@ snapshots:
 
   tslib@2.8.1: {}
 
+  tsx@4.23.15:
+    dependencies:
+      esbuild: 0.28.0
+    optionalDependencies:
+      fsevents: 2.3.3
+
   tuf-js@3.1.0(supports-color@8.1.1):
     dependencies:
       '@tufjs/models': 3.0.1
@@ -9484,7 +9498,7 @@ snapshots:
 
   vary@1.1.2: {}
 
-  vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0):
+  vite@6.4.2(@types/node@26.6.5)(jiti@1.21.7)(less@4.2.2)(lightningcss@1.32.0)(sass@1.85.0)(terser@5.39.0)(tsx@4.23.15):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.4)
@@ -9500,6 +9514,7 @@ snapshots:
       lightningcss: 1.32.0
       sass: 1.85.0
       terser: 5.39.0
+      tsx: 4.23.15
 
   void-elements@2.0.1: {}
 

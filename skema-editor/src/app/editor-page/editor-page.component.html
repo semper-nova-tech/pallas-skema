@@ -60,6 +60,25 @@
         <mat-label>Node label</mat-label>
         <input matInput [value]="selectedNodeLabel()" (input)="onLabelInput($event)" />
       </mat-form-field>
+
+      <div class="flex flex-wrap items-end gap-2" aria-label="Edge connection">
+        <mat-form-field class="min-w-[12rem]">
+          <mat-label>Connect to Node</mat-label>
+          <mat-select [value]="edgeTargetId()" (selectionChange)="edgeTargetId.set($event.value)">
+            @for (id of otherNodeIds(); track id) {
+              <mat-option [value]="id">{{ id }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="connectEdge()"
+          [disabled]="!edgeTargetId()"
+        >
+          Connect Edge
+        </button>
+      </div>
     }
   } @else if (session()?.lifecycleState === 'Unparseable') {
     <p class="text-slate-700">Manifest JSON does not parse. Fix the source file outside the Editor.</p>
