@@ -1,0 +1,112 @@
+mod handoff;
+
+use std::fs;
+use std::path::Path;
+
+pub use handoff::EditorJsonHandoff;
+use skema_core::{
+    format_text_failure, parse_manifest, render_manifest, serialize_manifest, validate_manifest,
+    ManifestDocument, TextFailure,
+};
+
+/// CLI subcommand inputs (wire model: CliInvocation).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CliInvocation {
+    Validate { manifest_path: String },
+    Render {
+        manifest_path: String,
+        svg_path: String,
+    },
+    OpenEditor {
+        manifest_path: String,
+        svg_path: String,
+        handoff_out: String,
+    },
+}
+
+/// Validate a Manifest file on disk (wire: runValidate).
+pub fn run_validate(manifest_path: &Path) -> Result<(), TextFailure> {
+    let json = read_manifest_text(manifest_path)?;
+    let manifest = parse_manifest(&json)?;
+    validate_manifest(&manifest)
+}
+
+/// Render SVG from a Manifest file; Validation runs first (wire: runRender).
+pub fn run_render(manifest_path: &Path, svg_path: &Path) -> Result<(), TextFailure> {
+    let json = read_manifest_text(manifest_path)?;
+    let manifest = parse_manifest(&json)?;
+    render_manifest(&manifest, svg_path).map(|_| ())
+}
+
+/// Write Editor JSON handoff payload; does not launch a pane (wire: runOpenEditor).
+pub fn run_open_editor(
+    manifest_path: &Path,
+    svg_path: &Path,
+    handoff_out: &Path,
+) -> Result<(), TextFailure> {
+    let manifest_json = if manifest_path.exists() {
+        read_manifest_text(manifest_path)?
+    } else {
+        let empty = empty_manifest();
+        validate_manifest(&empty)?;
+        serialize_manifest(&empty)
+    };
+
+    let payload = EditorJsonHandoff {
+        manifest_json,
+        manifest_path: path_to_string(manifest_path)?,
+        svg_path: path_to_string(svg_path)?,
+    };
+
+    if let Some(parent) = handoff_out.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| io_failure(&e))?;
+        }
+    }
+    let body = serde_json::to_string_pretty(&payload).map_err(|e| {
+        TextFailure {
+            message: format!("cannot serialize handoff: {e}"),
+            location: None,
+        }
+    })?;
+    fs::write(handoff_out, format!("{body}\n")).map_err(|e| io_failure(&e))
+}
+
+fn empty_manifest() -> ManifestDocument {
+    ManifestDocument {
+        nodes: vec![],
+        edges: vec![],
+    }
+}
+
+fn read_manifest_text(path: &Path) -> Result<String, TextFailure> {
+    fs::read_to_string(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            TextFailure {
+                message: format!("manifest file not found: {}", path.display()),
+                location: None,
+            }
+        } else {
+            io_failure(&e)
+        }
+    })
+}
+
+fn path_to_string(path: &Path) -> Result<String, TextFailure> {
+    path.to_str().map(str::to_owned).ok_or_else(|| TextFailure {
+        message: format!("path is not UTF-8: {}", path.display()),
+        location: None,
+    })
+}
+
+fn io_failure(err: &std::io::Error) -> TextFailure {
+    TextFailure {
+        message: format!("I/O error: {err}"),
+        location: None,
+    }
+}
+
+/// Format a Text failure for stderr (shared by library callers and the binary).
+pub fn format_cli_failure(failure: &TextFailure) -> String {
+    format_text_failure(failure)
+}
