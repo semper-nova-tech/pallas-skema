@@ -1,0 +1,67 @@
+<mat-toolbar color="primary" class="flex gap-4">
+  <span class="font-medium">Skema Editor</span>
+  <span class="text-sm opacity-90" aria-live="polite">{{ statusMessage() }}</span>
+  <span class="flex-1"></span>
+  <button mat-stroked-button type="button" (click)="addSampleNode()" [disabled]="!session()?.diagramVisible">
+    Add node
+  </button>
+  <button mat-flat-button type="button" (click)="onSave()" [disabled]="!session()?.diagramVisible">
+    Save
+  </button>
+</mat-toolbar>
+
+<main class="p-4 flex flex-col gap-4 max-w-5xl mx-auto">
+  @if (session()?.textFailure) {
+    <section
+      class="rounded border border-red-300 bg-red-50 p-3 text-red-900"
+      role="alert"
+      aria-label="Text failure"
+    >
+      {{ session()?.textFailure }}
+    </section>
+  }
+
+  @if (session()?.diagramVisible && session()?.manifest) {
+    <section aria-label="Diagram grid" class="relative border border-slate-300 bg-slate-50 min-h-[320px]">
+      @for (node of session()!.manifest!.nodes; track node.id) {
+        <button
+          type="button"
+          class="absolute border border-slate-700 bg-white px-2 py-1 text-left text-sm shadow-sm focus:outline focus:outline-2 focus:outline-blue-600"
+          [class.ring-2]="selectedNodeId() === node.id"
+          [class.ring-blue-600]="selectedNodeId() === node.id"
+          [style.left]="nodeStyle(node)['left']"
+          [style.top]="nodeStyle(node)['top']"
+          (click)="selectNode(node.id)"
+          [attr.aria-label]="'Node ' + node.label + ' at grid ' + node.gridPosition.x + ',' + node.gridPosition.y"
+        >
+          <span class="block font-medium">{{ node.label }}</span>
+          <span class="block text-xs text-slate-600">{{ node.type }} · {{ node.size }}</span>
+        </button>
+      }
+    </section>
+
+    <div class="flex flex-wrap gap-2" aria-label="Grid move controls">
+      <button mat-stroked-button type="button" (click)="moveSelected(-1, 0)" [disabled]="!selectedNodeId()">
+        Move left
+      </button>
+      <button mat-stroked-button type="button" (click)="moveSelected(1, 0)" [disabled]="!selectedNodeId()">
+        Move right
+      </button>
+      <button mat-stroked-button type="button" (click)="moveSelected(0, -1)" [disabled]="!selectedNodeId()">
+        Move up
+      </button>
+      <button mat-stroked-button type="button" (click)="moveSelected(0, 1)" [disabled]="!selectedNodeId()">
+        Move down
+      </button>
+    </div>
+
+    @if (selectedNodeId()) {
+      <mat-form-field class="w-full max-w-md">
+        <mat-label>Node label</mat-label>
+        <input matInput [value]="selectedNodeLabel()" (input)="onLabelInput($event)" />
+      </mat-form-field>
+    }
+  } @else if (session()?.lifecycleState === 'Unparseable') {
+    <p class="text-slate-700">Manifest JSON does not parse. Fix the source file outside the Editor.</p>
+  }
+</main>

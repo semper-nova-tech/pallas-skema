@@ -45,9 +45,11 @@ Status: planned
 ## Editor persistence (contract)
 
 - **Owner:** Frontend
-- **Input:** In-memory Diagram edits
-- **Output:** Manifest file write only after Validation passes; Text failure on refusal or repair states
-- **After valid save:** Primary journey invokes the shared Render (same backend entry as Agent) so SVG reflects the saved Manifest
+- **Input:** In-memory Diagram edits from `EditorJsonHandoff` (`manifestJson`, `manifestPath`, `svgPath`)
+- **Output:** Manifest file write only after Validation passes; Text failure on refusal or repair states; disk unchanged until a valid save
+- **Validation and Render transport (PT-002):** Angular Editor calls the `skema` binary (`validate`, `render`) via the local dev bridge (`skema-editor/server/skema-bridge.mjs`); no duplicate Validation rules in TypeScript
+- **After valid save:** Primary journey invokes shared Render so SVG reflects the saved Manifest; failed Validation writes no SVG and does not modify an existing SVG
+- **Implementation (PR-03):** Angular app `skema-editor`; glossary module `editor` exports `EditorSession`, `loadManifest`, `saveManifest`, `refuseInvalidEdit`, and `showTextFailure`
 
 ## System flow
 
