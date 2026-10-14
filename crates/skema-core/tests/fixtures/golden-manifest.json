@@ -1,0 +1,29 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "label": "Start process",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "decide",
+      "label": "Choose path",
+      "type": "decision",
+      "size": "small",
+      "gridPosition": { "x": 2, "y": 0 }
+    },
+    {
+      "id": "note1",
+      "label": "Remember: no execution",
+      "type": "note",
+      "size": "large",
+      "gridPosition": { "x": 0, "y": 2 }
+    }
+  ],
+  "edges": [
+    { "from": "start", "to": "decide", "label": "next" },
+    { "from": "decide", "to": "note1" }
+  ]
+}
