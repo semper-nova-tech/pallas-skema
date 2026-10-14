@@ -1,0 +1,19 @@
+[package]
+name = "skema"
+version = "0.1.0"
+edition = "2021"
+description = "Pallas Skema v1 command-line tool: validate, render, and Editor JSON handoff"
+
+[[bin]]
+name = "skema"
+path = "src/main.rs"
+
+[lib]
+name = "skema"
+path = "src/lib.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+skema-core = { path = "../skema-core" }

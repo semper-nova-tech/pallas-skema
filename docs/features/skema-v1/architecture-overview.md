@@ -28,6 +28,14 @@ Status: planned
 - **Invariants:** Same valid Manifest → identical SVG bytes; no execution of Manifest content
 - **Implementation (PR-01):** `skema-core::render::render_manifest` runs Validation first, then writes `image/svg+xml` bytes; failed Validation leaves an existing SVG file unchanged.
 
+## Command-line tool (contract)
+
+- **Owner:** Backend
+- **Input:** Workspace paths for Manifest and SVG; subcommands validate, render, and open-editor
+- **Output:** Exit code zero on success; Text failure on stderr and non-zero exit on errors; open-editor writes JSON handoff only (no Herdr pane until PR-04)
+- **Invariants:** Render subcommand runs Validation first; Agent path uses the same library Validation and Render as the Editor save path
+- **Implementation (PR-02):** Binary `skema` in crate `skema`; `skema::cli::run_validate`, `run_render`, and `run_open_editor`; handoff payload `EditorJsonHandoff` with `manifestJson`, `manifestPath`, and `svgPath`
+
 ## Editor launch (contract)
 
 - **Owner:** Infrastructure (local pane only)
