@@ -1,14 +1,13 @@
 @use '@angular/material' as mat;
 
-@import "tailwindcss";
-
 html {
   @include mat.core();
+  color-scheme: dark;
 
   $theme: mat.define-theme((
     color: (
-      theme-type: light,
-      primary: mat.$azure-palette,
+      theme-type: dark,
+      primary: mat.$green-palette,
     ),
   ));
   @include mat.all-component-themes($theme);
@@ -18,8 +17,7 @@ html,
 body {
   height: 100%;
   margin: 0;
-}
-
-body {
-  font-family: Roboto, "Helvetica Neue", sans-serif;
+  background: oklch(0.14 0.02 145);
+  color: oklch(0.86 0.09 145);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
 }
