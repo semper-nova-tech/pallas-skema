@@ -7,4 +7,4 @@ AI and human friendly diagram protocol.
 
 Repository: [https://github.com/semper-nova-tech/pallas-skema](https://github.com/semper-nova-tech/pallas-skema)
 
-Related orchestration product: [Pallas Agent Flow](https://github.com/semper-nova-tech/pallas-agent-flow)
+JSON > Diagram > Editor > SVG. Bridging the design and comprehension gap
