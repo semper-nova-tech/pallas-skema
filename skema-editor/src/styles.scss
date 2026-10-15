@@ -1,5 +1,29 @@
 @use '@angular/material' as mat;
 
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/IBMPlexMono-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/IBMPlexMono-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/IBMPlexMono-SemiBold.woff2") format("woff2");
+}
+
 html {
   @include mat.core();
   color-scheme: dark;
@@ -17,7 +41,7 @@ html,
 body {
   height: 100%;
   margin: 0;
-  background: oklch(0.14 0.02 145);
-  color: oklch(0.86 0.09 145);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  background: var(--ink);
+  color: var(--phosphor);
+  font-family: var(--font-family), ui-monospace, monospace;
 }

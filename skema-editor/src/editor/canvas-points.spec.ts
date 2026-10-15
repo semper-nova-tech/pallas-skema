@@ -1,11 +1,15 @@
+import { skemaStyle } from '../style/skema-style';
 import { nearestPort, snapToCell } from './canvas-points';
 
 describe('canvas points', () => {
+  const pad = skemaStyle.pad;
+  const cell = skemaStyle.cell;
+
   it('snaps a pixel to the nearest grid cell', () => {
-    expect(snapToCell(28, 28, 56)).toBe(0);
-    expect(snapToCell(28 + 56 + 20, 28, 56)).toBe(1);
-    expect(snapToCell(10, 28, 56)).toBe(0);
-    expect(snapToCell(-40, 28, 56)).toBe(-1);
+    expect(snapToCell(pad, pad, cell)).toBe(0);
+    expect(snapToCell(pad + cell + 20, pad, cell)).toBe(1);
+    expect(snapToCell(10, pad, cell)).toBe(0);
+    expect(snapToCell(-40, pad, cell)).toBe(-1);
   });
 
   it('picks the closest port on another node', () => {

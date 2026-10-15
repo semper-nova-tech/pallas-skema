@@ -23,10 +23,11 @@ import {
   type PortSide,
 } from '../../editor/canvas-points';
 import type { EditorJsonHandoff, ManifestNode } from '../../editor/manifest.types';
+import { skemaStyle } from '../../style/skema-style';
 import { SkemaApiService } from '../skema-api.service';
 
-const CELL_PX = 56;
-const CANVAS_PAD = 28;
+const CELL_PX = skemaStyle.cell;
+const CANVAS_PAD = skemaStyle.pad;
 
 interface PortHit {
   nodeId: string;
@@ -56,8 +57,8 @@ export class EditorPageComponent implements OnInit {
   private readonly transport = inject(SkemaApiService);
 
   readonly portSides = PORT_SIDES;
-  readonly canvasColumns = 16;
-  readonly canvasRows = 10;
+  readonly canvasColumns = skemaStyle.minColumns;
+  readonly canvasRows = skemaStyle.minRows;
   readonly session = signal<EditorSession | null>(null);
   readonly selectedNodeId = signal<string | null>(null);
   readonly edgeTargetId = signal<string | null>(null);
@@ -97,13 +98,7 @@ export class EditorPageComponent implements OnInit {
   }
 
   nodeBox(node: ManifestNode): { width: number; height: number } {
-    if (node.size === 'small') {
-      return { width: 104, height: 44 };
-    }
-    if (node.size === 'large') {
-      return { width: 156, height: 60 };
-    }
-    return { width: 128, height: 52 };
+    return skemaStyle.nodes[node.size];
   }
 
   nodeTransform(node: ManifestNode): string {
@@ -164,7 +159,7 @@ export class EditorPageComponent implements OnInit {
           x2: end.x,
           y2: end.y,
           labelX: (start.x + end.x) / 2,
-          labelY: (start.y + end.y) / 2 - 6,
+          labelY: (start.y + end.y) / 2 - skemaStyle.edgeLabelLift,
         },
       ];
     });

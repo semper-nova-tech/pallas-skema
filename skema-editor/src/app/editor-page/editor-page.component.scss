@@ -2,16 +2,8 @@
   display: block;
   min-height: 100%;
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-  --ink: oklch(0.14 0.02 145);
-  --panel: oklch(0.18 0.028 145);
-  --phosphor: oklch(0.86 0.11 145);
-  --phosphor-dim: oklch(0.64 0.06 145);
-  --dot: oklch(0.4 0.05 145);
-  --amber: oklch(0.8 0.1 85);
-  --line: oklch(0.72 0.08 145);
-  --cell: 56px;
   container-type: inline-size;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-family: var(--font-family), ui-monospace, monospace;
 }
 
 .shell {
@@ -113,11 +105,11 @@
   flex: 1;
   width: 100%;
   height: 100%;
-  background-color: oklch(0.16 0.025 145);
-  background-image: radial-gradient(circle, var(--dot) 1.2px, transparent 1.35px);
+  background-color: var(--canvas);
+  background-image: radial-gradient(circle, var(--dot) var(--dot-radius), transparent calc(var(--dot-radius) + 0.15px));
   background-size: var(--cell) var(--cell);
-  background-position: 8px 8px;
-  border: 1px solid color-mix(in oklch, var(--phosphor) 30%, transparent);
+  background-position: var(--dot-offset) var(--dot-offset);
+  border: var(--node-border) solid var(--frame);
   box-shadow: inset 0 0 0 1px oklch(0.1 0.02 145);
 }
 
@@ -132,7 +124,7 @@
 
 .wires line {
   stroke: var(--line);
-  stroke-width: 1.5;
+  stroke-width: var(--edge-width);
 }
 
 .wires line.draft {
@@ -209,8 +201,8 @@
 
 .wires text {
   fill: var(--phosphor-dim);
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
+  font-family: var(--font-family), ui-monospace, monospace;
+  font-size: var(--edge-label-size);
   text-anchor: middle;
 }
 
@@ -232,11 +224,13 @@
   justify-content: center;
   width: 100%;
   height: 100%;
-  gap: 0.15rem;
-  padding: 0.35rem 0.55rem;
-  border: 1px solid var(--phosphor);
-  border-radius: 8px;
-  background: oklch(0.2 0.03 145);
+  gap: var(--text-gap);
+  padding: 0 var(--text-pad-x);
+  border: var(--node-border) solid var(--phosphor);
+  border-radius: var(--radius);
+  background: var(--node-fill);
+  overflow: hidden;
+  white-space: normal;
   color: var(--phosphor);
   text-align: left;
   cursor: grab;
@@ -296,7 +290,7 @@
 
 .node[data-type='decision'] {
   border-color: var(--amber);
-  color: oklch(0.9 0.06 85);
+  color: var(--amber-text);
 }
 
 .node[data-type='note'] {
@@ -312,17 +306,20 @@
 }
 
 .node-label {
-  font-size: 0.82rem;
-  font-weight: 500;
+  font-size: var(--label-size);
+  line-height: 1;
+  font-weight: var(--label-weight);
 }
 
 .node-meta {
-  font-size: 0.68rem;
+  font-size: var(--meta-size);
+  line-height: 1;
+  font-weight: var(--meta-weight);
   color: var(--phosphor-dim);
 }
 
 .node[data-type='decision'] .node-meta {
-  color: oklch(0.74 0.06 85);
+  color: var(--amber-dim);
 }
 
 .empty {

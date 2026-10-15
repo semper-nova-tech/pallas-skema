@@ -32,6 +32,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "*.woff2",
+                "input": "../style/fonts",
+                "output": "/fonts"
               }
             ],
             "styles": [
@@ -96,6 +101,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "*.woff2",
+                "input": "../style/fonts",
+                "output": "/fonts"
               }
             ],
             "styles": [
