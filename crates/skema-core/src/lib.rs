@@ -3,11 +3,14 @@
 pub mod grid;
 pub mod manifest;
 pub mod render;
+mod style;
 pub mod svg;
 pub mod validation;
 
 pub use grid::{Grid, GridPosition};
-pub use manifest::{Edge, ManifestDocument, Node, NodeSize, NodeType, parse_manifest, serialize_manifest};
+pub use manifest::{
+    parse_manifest, serialize_manifest, Edge, ManifestDocument, Node, NodeSize, NodeType,
+};
 pub use render::render_manifest;
 pub use svg::SvgOutput;
-pub use validation::{TextFailure, format_text_failure, validate_manifest};
+pub use validation::{format_text_failure, validate_manifest, TextFailure};

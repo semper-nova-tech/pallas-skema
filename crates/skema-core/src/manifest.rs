@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::grid::GridPosition;
-use crate::validation::{TextFailure, text_failure};
+use crate::validation::{text_failure, TextFailure};
 
 /// Parsed Manifest document (wire: manifest).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,12 +51,7 @@ pub enum NodeSize {
 
 /// Parse Manifest JSON text (wire: parseManifest).
 pub fn parse_manifest(json: &str) -> Result<ManifestDocument, TextFailure> {
-    serde_json::from_str(json).map_err(|err| {
-        text_failure(
-            format!("malformed JSON: {err}"),
-            None,
-        )
-    })
+    serde_json::from_str(json).map_err(|err| text_failure(format!("malformed JSON: {err}"), None))
 }
 
 /// Serialize a Manifest to JSON text (wire: serializeManifest).

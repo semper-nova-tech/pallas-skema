@@ -1,0 +1,189 @@
+<div class="shell" [class.linking]="linkDrag()">
+  <aside class="rail" aria-label="Editor controls">
+    <p class="mark">Skema</p>
+    <p class="status" aria-live="polite">{{ statusMessage() }}</p>
+
+    @if (session()?.textFailure) {
+      <p class="alert" role="alert">{{ session()?.textFailure }}</p>
+    }
+
+    <div class="actions">
+      <button mat-stroked-button type="button" (click)="addSampleNode()" [disabled]="!session()?.diagramVisible">
+        Add node
+      </button>
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        (click)="onSave()"
+        [disabled]="!session()?.diagramVisible"
+        [class.saved]="justSaved()"
+      >
+        {{ justSaved() ? 'Saved' : 'Save' }}
+      </button>
+    </div>
+
+    <fieldset class="pad">
+      <legend>Move</legend>
+      <div class="dpad" aria-label="Grid move controls">
+        <button mat-stroked-button type="button" (click)="moveSelected(0, -1)" [disabled]="!selectedNodeId()">Up</button>
+        <button mat-stroked-button type="button" (click)="moveSelected(-1, 0)" [disabled]="!selectedNodeId()">Left</button>
+        <button mat-stroked-button type="button" (click)="moveSelected(1, 0)" [disabled]="!selectedNodeId()">Right</button>
+        <button mat-stroked-button type="button" (click)="moveSelected(0, 1)" [disabled]="!selectedNodeId()">Down</button>
+      </div>
+    </fieldset>
+
+    @if (selectedNodeId()) {
+      <mat-form-field class="field" subscriptSizing="dynamic">
+        <mat-label>Rename</mat-label>
+        <input matInput [value]="selectedNodeLabel()" (input)="onLabelInput($event)" />
+      </mat-form-field>
+
+      <div class="connect" aria-label="Edge connection">
+        <mat-form-field class="field" subscriptSizing="dynamic">
+          <mat-label>Connect to Node</mat-label>
+          <mat-select [value]="edgeTargetId()" (selectionChange)="edgeTargetId.set($event.value)">
+            @for (id of otherNodeIds(); track id) {
+              <mat-option [value]="id">{{ id }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <button mat-stroked-button type="button" (click)="connectEdge()" [disabled]="!edgeTargetId()">
+          Connect Edge
+        </button>
+      </div>
+    } @else if (session()?.diagramVisible) {
+      <p class="hint">Drag a node and it snaps to the grid. Drag a side point to connect. Right-click while connecting adds a node. Middle-click or leaving the window cancels.</p>
+    }
+  </aside>
+
+  <section class="stage" aria-label="Diagram canvas">
+    <p class="canvas-meta">{{ canvasColumns }} × {{ canvasRows }} grid · drag to snap · side points connect · right-click adds · middle-click cancels</p>
+    <div class="canvas-scroll">
+      @if (session()?.diagramVisible && session()?.manifest) {
+        <div
+          class="canvas"
+          [style.min-width.px]="canvasWidth()"
+          [style.min-height.px]="canvasHeight()"
+        >
+          <svg class="wires">
+            @for (edge of edgeDrawings(); track edge.index) {
+              <line [attr.x1]="edge.x1" [attr.y1]="edge.y1" [attr.x2]="edge.x2" [attr.y2]="edge.y2" />
+              <line
+                class="edge-hit"
+                [attr.x1]="edge.x1"
+                [attr.y1]="edge.y1"
+                [attr.x2]="edge.x2"
+                [attr.y2]="edge.y2"
+                (mouseenter)="showEdgeTip(edge.index)"
+                (mouseleave)="hideEdgeTip(edge.index)"
+              >
+                <title>Edge {{ edge.label || 'unnamed' }}</title>
+              </line>
+              @if (edge.label && editingEdge() !== edge.index) {
+                <text [attr.x]="edge.labelX" [attr.y]="edge.labelY">{{ edge.label }}</text>
+              }
+            }
+            @if (linkDrag(); as link) {
+              <line class="draft" [attr.x1]="link.x1" [attr.y1]="link.y1" [attr.x2]="link.x2" [attr.y2]="link.y2" />
+            }
+          </svg>
+
+          @for (edge of edgeDrawings(); track edge.index) {
+            @if (edgeTipOpen(edge.index)) {
+              <div
+                class="edge-tip"
+                role="toolbar"
+                [attr.aria-label]="'Edge from ' + edge.from + ' to ' + edge.to"
+                [style.left.px]="edge.labelX"
+                [style.top.px]="edge.labelY"
+                (mouseenter)="showEdgeTip(edge.index)"
+                (mouseleave)="hideEdgeTip(edge.index)"
+              >
+                @if (editingEdge() === edge.index) {
+                  <input
+                    class="edge-name"
+                    type="text"
+                    aria-label="Edge name"
+                    placeholder="Line name"
+                    autofocus
+                    [value]="edgeDraft()"
+                    (input)="onEdgeDraft($event)"
+                    (keydown.enter)="commitEdgeEdit(edge.index)"
+                    (keydown.escape)="editingEdge.set(null)"
+                    (blur)="commitEdgeEdit(edge.index)"
+                  />
+                } @else {
+                  <button type="button" class="tip-btn" aria-label="Edit Edge name" (click)="startEdgeEdit(edge.index, edge.label, $event)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 1.8 14.2 4.8 5.5 13.5 2 14l.5-3.5 8.7-8.7Zm1.1-1.1a1.2 1.2 0 0 1 1.7 0l1.3 1.3a1.2 1.2 0 0 1 0 1.7l-.8.8-3-3 .8-.8Z"/></svg>
+                  </button>
+                  <button type="button" class="tip-btn" aria-label="Remove Edge" (click)="deleteEdge(edge.index, $event)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5h4l.5 1H14v1.5H2V2.5h3.5L6 1.5ZM3.2 5h9.6l-.6 9.2a1 1 0 0 1-1 .8H4.8a1 1 0 0 1-1-.8L3.2 5Z"/></svg>
+                  </button>
+                }
+              </div>
+            }
+          }
+
+          @for (node of session()!.manifest!.nodes; track node.id) {
+            <div
+              class="node-anchor"
+              [class.selected]="selectedNodeId() === node.id"
+              [style.width.px]="nodeBox(node).width"
+              [style.height.px]="nodeBox(node).height"
+              [style.transform]="nodeTransform(node)"
+            >
+              <button
+                type="button"
+                class="node"
+                [attr.data-type]="node.type"
+                (pointerdown)="beginNodeDrag($event, node)"
+                (dblclick)="startRename(node.id, $event)"
+                [attr.aria-pressed]="selectedNodeId() === node.id"
+                [attr.aria-label]="'Node ' + node.label + ', ' + node.type + ', grid ' + node.gridPosition.x + ' ' + node.gridPosition.y"
+              >
+                @if (renamingNodeId() !== node.id) {
+                  <span class="node-label">{{ node.label }}</span>
+                }
+                <span class="node-meta">{{ node.type }} · {{ node.size }}</span>
+              </button>
+              @if (renamingNodeId() === node.id) {
+                <input
+                  class="node-rename"
+                  type="text"
+                  aria-label="Rename node"
+                  autofocus
+                  [value]="node.label"
+                  (input)="onLabelInput($event)"
+                  (pointerdown)="$event.stopPropagation()"
+                  (dblclick)="$event.stopPropagation()"
+                  (keydown.enter)="stopRename()"
+                  (keydown.escape)="stopRename()"
+                  (blur)="stopRename()"
+                />
+              }
+              @for (side of portSides; track side) {
+                <button
+                  type="button"
+                  class="port"
+                  [class.armed]="isArmed(node.id, side)"
+                  [attr.data-side]="side"
+                  (pointerdown)="beginLink($event, node, side)"
+                  [attr.aria-label]="'Connect from the ' + side + ' of ' + node.label"
+                ></button>
+              }
+            </div>
+          }
+
+          @if (session()!.manifest!.nodes.length === 0) {
+            <p class="empty">Empty canvas. Add a node to place the first step.</p>
+          }
+        </div>
+      } @else if (session()?.lifecycleState === 'Unparseable') {
+        <p class="unparsed">Manifest JSON does not parse. Fix the source file outside the Editor.</p>
+      } @else {
+        <p class="unparsed">{{ statusMessage() }}</p>
+      }
+    </div>
+  </section>
+</div>

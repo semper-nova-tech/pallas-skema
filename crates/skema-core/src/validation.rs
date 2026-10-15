@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::grid::GridPosition;
-use crate::manifest::{ManifestDocument, NodeType, NodeSize};
+use crate::manifest::{ManifestDocument, NodeSize, NodeType};
 
 /// Validation or parse failure message (wire: textFailure).
 #[derive(Debug, Clone, PartialEq, Eq)]
