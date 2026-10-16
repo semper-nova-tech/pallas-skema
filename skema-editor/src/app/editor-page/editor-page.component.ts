@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
@@ -47,12 +47,21 @@ interface LinkDrag {
 
 @Component({
   selector: 'app-editor-page',
-  standalone: true,
   imports: [MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
   templateUrl: './editor-page.component.html',
   styleUrl: './editor-page.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(document:pointermove)': 'onPointerMove($event)',
+    '(document:pointerup)': 'onPointerUp($event)',
+    '(document:pointerdown)': 'onPointerDown($event)',
+    '(document:auxclick)': 'onAuxClick($event)',
+    '(document:contextmenu)': 'onContextMenu($event)',
+    '(document:mouseout)': 'onMouseOut($event)',
+    '(document:pointercancel)': 'onPointerCancel()',
+  },
 })
-export class EditorPageComponent implements OnInit {
+export class EditorPageComponent {
   private readonly http = inject(HttpClient);
   private readonly transport = inject(SkemaApiService);
 
@@ -78,7 +87,7 @@ export class EditorPageComponent implements OnInit {
   private nodeDrag: { nodeId: string; originX: number; originY: number; moved: boolean } | null = null;
   private linkLive = false;
 
-  ngOnInit(): void {
+  constructor() {
     void this.bootstrap();
   }
 
@@ -222,7 +231,6 @@ export class EditorPageComponent implements OnInit {
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
 
-  @HostListener('document:pointermove', ['$event'])
   onPointerMove(event: PointerEvent): void {
     const point = this.pointOn(this.canvas, event);
     if (!point) {
@@ -251,7 +259,6 @@ export class EditorPageComponent implements OnInit {
     });
   }
 
-  @HostListener('document:pointerup', ['$event'])
   onPointerUp(event: PointerEvent): void {
     if (event.button !== 0) {
       return;
@@ -265,7 +272,6 @@ export class EditorPageComponent implements OnInit {
     }
   }
 
-  @HostListener('document:pointerdown', ['$event'])
   onPointerDown(event: PointerEvent): void {
     if (event.button === 1 && this.linkLive) {
       event.preventDefault();
@@ -273,14 +279,12 @@ export class EditorPageComponent implements OnInit {
     }
   }
 
-  @HostListener('document:auxclick', ['$event'])
   onAuxClick(event: MouseEvent): void {
     if (event.button === 1) {
       event.preventDefault();
     }
   }
 
-  @HostListener('document:contextmenu', ['$event'])
   onContextMenu(event: MouseEvent): void {
     const link = this.linkDrag();
     if (!link || !this.linkLive) {
@@ -294,14 +298,12 @@ export class EditorPageComponent implements OnInit {
     }
   }
 
-  @HostListener('document:mouseout', ['$event'])
   onMouseOut(event: MouseEvent): void {
     if (this.linkLive && event.relatedTarget === null) {
       this.cancelLink();
     }
   }
 
-  @HostListener('document:pointercancel')
   onPointerCancel(): void {
     this.nodeDrag = null;
     this.dragPreview.set(null);
