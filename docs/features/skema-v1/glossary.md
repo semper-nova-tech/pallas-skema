@@ -20,11 +20,11 @@ The technical spec owns shapes; this file owns names, meanings, and surfaces.
 | Node type | The kind of Node. v1 values are process, decision, and note. | enum | backend | NodeType | | manifest | type | new | |
 | Node size | The predefined size of a Node. v1 values are small, medium, and large. | enum | backend | NodeSize | | manifest | size | new | |
 | Diagram | The flow a Manifest describes. It is a picture of a flow, not executable automation. | term | frontend | | | diagram | | new | |
-| Editor | The visual client the Human reviewer uses to move Nodes, connect Edges, and edit labels. It reads and writes a Manifest. | client | frontend | EditorSession | loadManifest, saveManifest, refuseInvalidEdit, showTextFailure | editor | editorSession | new | |
-| Command-line tool | The local Rust entry point that validates and renders Manifests and opens the Editor with a JSON handoff. | client | backend | CliInvocation | runValidate, runRender, runOpenEditor | cli | skema | new | |
+| Editor | The window the Human reviewer uses to move Nodes, connect Edges, and edit labels. The Command-line tool owns it. It reads and writes a Manifest. | client | frontend | EditorSession | loadManifest, saveManifest, refuseInvalidEdit, showTextFailure | editor | editorSession | new | |
+| Command-line tool | The local Rust entry point that validates and renders Manifests, owns the Editor window, and accepts close and save requests for that window. | client | backend | CliInvocation | runValidate, runRender, runOpenEditor | cli | skema | new | |
 | Human reviewer | The person who reads a Manifest, reviews an SVG, and arranges a Diagram in the Editor. | persona | frontend | | | | | new | |
 | Agent | The actor that edits a Manifest as text and produces an SVG without the Editor. | persona | backend | | | | | new | |
-| Herdr | The local pane host that shows the Editor. It is not the Pallas Agent Flow worker adapter. | config | infrastructure | | | | | new | |
+| Herdr | An optional local pane host that may show the Editor window. The Editor does not require it. It is not the Pallas Agent Flow worker adapter. | config | infrastructure | | | | | new | |
 
 Rules:
 

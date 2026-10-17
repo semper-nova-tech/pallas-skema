@@ -7,8 +7,8 @@ Glossary rows this spec introduces surfaces for or relies on: Manifest, JSON, SV
 
 ## Scope and constraints
 
-- **In scope:** All frontier items from the accepted PRD review for skema-v1; local workspace files only; JSON Manifest; shared Validation before SVG; deterministic Render; Angular Editor (Decision Angular Editor D-001); Rust Validation, Render, and command-line tool (Decision Rust core D-002); JSON Manifest handoff to Editor (Decision JSON handoff D-004); minimal tooling (Decision Minimal tooling D-006).
-- **Out of scope:** Hosting, accounts, upload (Decision Webpage later D-005); workflow runner; egui; YAML Manifest as source of truth; executable commands in Manifest; pixel placement and custom sizes or colors.
+- **In scope:** All frontier items from the accepted PRD review for skema-v1; local workspace files only; JSON Manifest; shared Validation before SVG; deterministic Render; Angular Editor (Decision Angular Editor D-001); Rust Validation, Render, and command-line tool (Decision Rust core D-002); JSON Manifest handoff to Editor (Decision JSON handoff D-004); one Editor window owned by the Rust command-line tool (Decision Editor window D-003); minimal tooling (Decision Minimal tooling D-006).
+- **Out of scope:** Hosting, accounts, upload, and a browser tab as the Editor (Decision Local window D-005); requiring Herdr to open the Editor; workflow runner; egui; YAML Manifest as source of truth; executable commands in Manifest; pixel placement and custom sizes or colors.
 - **Non-authoritative:** `README.md`, `pallas-skema.md`, `brainstorming.md` do not define v1 behavior.
 
 ## Requirement index
@@ -21,7 +21,7 @@ Glossary rows this spec introduces surfaces for or relies on: Manifest, JSON, SV
 | Render Manifest contract | CONTRACT-render-manifest | CONTRACT | backend |
 | Command-line tool surface | CONTRACT-cli-surface | CONTRACT | backend |
 | Editor JSON handoff | CONTRACT-editor-json-handoff | CONTRACT | backend |
-| Launch Editor in Herdr pane | CONTRACT-launch-editor-pane | CONTRACT | infrastructure |
+| Launch Editor window | CONTRACT-launch-editor-pane | CONTRACT | backend |
 | Editor Manifest lifecycle | STATE-editor-manifest-lifecycle | STATE | frontend |
 | Gate SVG on Validation | BEHAVIOR-validation-gate | BEHAVIOR | backend |
 | Deterministic SVG bytes | BEHAVIOR-deterministic-render | BEHAVIOR | backend |
@@ -117,7 +117,7 @@ Glossary rows this spec introduces surfaces for or relies on: Manifest, JSON, SV
 
 - Meaning: Local entry point for Validation, Render, and opening the Editor.
 - Today: No command-line tool (Discovery index DISC-index v1).
-- After: Human reviewer and Agent invoke validate, render, and open-editor commands against workspace paths; Agent completes journey without Editor.
+- After: Human reviewer and Agent invoke validate, render, and open-editor commands against workspace paths. open-editor stays running and owns the Editor window until close. Agent completes journey without Editor.
 - Type: CONTRACT
 - Owner: backend
 - Frontier: Agent render without Editor (FR-agent-render), Runnable diagram product (FR-runnable-product)
@@ -130,7 +130,7 @@ Glossary rows this spec introduces surfaces for or relies on: Manifest, JSON, SV
 - Architecture impact: update
 - Durable docs/ADRs: none
 - Domain drafts: none
-- Non-goals: Workflow runner; hosted API
+- Non-goals: Workflow runner; shared hosted API
 
 ### Editor JSON handoff (`CONTRACT-editor-json-handoff`)
 
@@ -151,24 +151,24 @@ Glossary rows this spec introduces surfaces for or relies on: Manifest, JSON, SV
 - Domain drafts: none
 - Non-goals: Web upload of Manifest
 
-### Launch Editor in Herdr pane (`CONTRACT-launch-editor-pane`)
+### Launch Editor window (`CONTRACT-launch-editor-pane`)
 
-- Meaning: One Editor instance opens in a Herdr pane from the command-line tool (Decision Pane-hosted Editor D-003, assumed).
-- Today: No pane launch integration (Discovery index DISC-index v1).
-- After: Human reviewer opens Editor from CLI; no second terminal canvas; local pane only.
+- Meaning: The Rust command-line tool owns one Editor window per open-editor launch (Decision Editor window D-003). The Angular Editor is shown in that window. Herdr may show the same window and is not required.
+- Today: open-editor writes a JSON handoff and exits. The Editor is a localhost dev server the Human reviewer opens in a browser.
+- After: open-editor stays running, opens one window for the handoff Manifest and SVG, and accepts close and save requests. Close ends the window and does not write unsaved edits. Save asks the Editor for the current Diagram, then uses the Editor save path. The window opens from any terminal without Herdr.
 - Type: CONTRACT
-- Owner: infrastructure
+- Owner: backend
 - Frontier: Runnable diagram product (FR-runnable-product)
-- Terms: Editor, Command-line tool
-- Inputs/outputs: Launch request from CLI → Editor pane running
-- Invariants and failures: Single Editor instance per launch; failure surfaces as Text failure if pane cannot open
+- Terms: Editor, Command-line tool, Herdr
+- Inputs/outputs: Launch request from CLI → Editor window owned by that process. Close request → window closed, files unchanged. Save request → Manifest and SVG written only when Validation passes.
+- Invariants and failures: One window per launch. Failure to open the window surfaces as Text failure. Unsaved edits live in the Editor until a save request or an Editor save.
 - Depends on: CONTRACT-cli-surface, CONTRACT-editor-json-handoff
-- Acceptance checks: Manual or automated smoke: CLI open-editor shows Editor in pane with handoff
-- Evidence: Local Herdr launch script or test harness log
+- Acceptance checks: AC-editor-window; AC-editor-close; AC-editor-save-command
+- Evidence: Launch from a terminal with no Herdr session; close and save requests against the running process
 - Architecture impact: decision
 - Durable docs/ADRs: none
 - Domain drafts: none
-- Non-goals: Desktop packaging; browser-hosted Editor in v1
+- Non-goals: Desktop packaging; a browser tab as the Editor; requiring Herdr
 
 ### Editor Manifest lifecycle (`STATE-editor-manifest-lifecycle`)
 
@@ -429,23 +429,23 @@ BEHAVIOR-runnable-product → all above
 | Validate Manifest | backend | frontend Editor, CLI | Manifest JSON → pass or Text failure |
 | Render Manifest | backend | CLI, Editor after save | Validated Manifest → SVG path |
 | Editor JSON handoff | backend CLI | frontend Editor | JSON Manifest + file paths |
-| Launch Editor in pane | infrastructure | frontend Editor | Pane session with handoff |
+| Launch Editor window | backend CLI | frontend Editor | Window owned by the CLI process, showing the JSON handoff |
 
 ## Facts to verify before build
 
 | Fact | Status | Owner | Checkpoint |
 | --- | --- | --- | --- |
-| Pane-hosted Editor: command-line tool opens one Angular Editor in a Herdr pane without a second terminal canvas (Decision Pane-hosted Editor D-003) | assumed | infrastructure | technical-requirements approval checkpoint |
-| Herdr pane launch mechanism and env vars for local dev are available on builder machines | assumed | infrastructure | technical-requirements approval checkpoint |
+| Editor window is owned by the Rust command-line tool; the Human reviewer does not work in a browser tab (Decision Editor window D-003) | decided | backend | product draft v4 |
+| Herdr may show that window and is not required to open the Editor | decided | infrastructure | product draft v4 |
 | Editor save invokes backend Render in-process or via CLI wrapper (same Render entry as Agent) | assumed | frontend | technical-requirements approval checkpoint |
 
 ## Architecture documentation plan
 
-Published [architecture-overview.md](architecture-overview.md) holds models, contracts, and diagrams. No separate ADR in v1 unless launch pane decision needs one during build.
+Published [architecture-overview.md](architecture-overview.md) holds models, contracts, and diagrams. No separate ADR in v1. The Editor window decision is D-003.
 
 ### Diagram plan
 
-- **Purpose:** Show shared Validation and Render across Agent CLI path and Human reviewer Editor path, plus Herdr pane launch.
+- **Purpose:** Show shared Validation and Render across Agent CLI path and Human reviewer Editor path. The CLI owns the Editor window. Herdr is an optional pane around that window.
 - **Type:** flowchart
 - **Home:** architecture-overview.md § System flow
 - **Source requirements:** BEHAVIOR-runnable-product, BEHAVIOR-agent-render, BEHAVIOR-editor-save-render, CONTRACT-launch-editor-pane
@@ -463,8 +463,8 @@ Greenfield: no migration. Rollout is local install/build of command-line tool an
 
 ## Local and hosted configuration
 
-- **Local:** Workspace paths for Manifest and SVG supplied to CLI and Editor handoff; Herdr pane configuration for Editor launch on developer machines.
-- **Hosted:** none (Decision Webpage later D-005).
+- **Local:** Workspace paths for Manifest and SVG supplied to CLI and Editor handoff. The CLI process owns the Editor window. Herdr configuration is optional.
+- **Hosted:** none (Decision Local window D-005).
 
 ## Coverage matrix
 
@@ -490,7 +490,7 @@ Greenfield: no migration. Rollout is local install/build of command-line tool an
 | CONTRACT-render-manifest | AC-svg-matches; Render rejects without prior Validation success |
 | CONTRACT-cli-surface | AC-agent-render; validate/render/open-editor subcommands succeed in workspace test |
 | CONTRACT-editor-json-handoff | AC-empty-start bootstrap; open existing Manifest matches file JSON |
-| CONTRACT-launch-editor-pane | Smoke: CLI opens Editor in Herdr pane with handoff |
+| CONTRACT-launch-editor-pane | AC-editor-window; AC-editor-close; AC-editor-save-command |
 | STATE-editor-manifest-lifecycle | AC-repair-invalid, AC-empty-start, AC-refuse-invalid-edit state transitions |
 | BEHAVIOR-validation-gate | AC-preserve-svg; no SVG write on Validation failure |
 | BEHAVIOR-deterministic-render | AC-deterministic byte-identical output |
@@ -510,9 +510,9 @@ Greenfield: no migration. Rollout is local install/build of command-line tool an
 | --- | --- |
 | Angular Editor (D-001) | Editor owner frontend; Angular implements STATE and BEHAVIOR Editor requirements |
 | Rust core (D-002) | Validation, Render, CLI owner backend |
-| Pane-hosted Editor (D-003) | CONTRACT-launch-editor-pane owner infrastructure; recorded as assumed fact |
+| Editor window (D-003) | Rust command-line tool owns one native window per open-editor launch and shows the Angular Editor in it. The process accepts close and save. Herdr may show the window and is not required. |
 | JSON handoff (D-004) | CONTRACT-editor-json-handoff |
-| Webpage later (D-005) | No hosting; handoff keeps Editor able to accept JSON for a later skin |
+| Local window (D-005) | No accounts, upload, or shared hosting. The Human reviewer does not work in a browser tab. |
 | Minimal tooling (D-006) | Nineteen requirements cover full frontier without extra products |
 
 ## Open questions

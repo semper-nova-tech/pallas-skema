@@ -4,15 +4,23 @@
 
 ### Added
 
-- Acceptance criteria (AC-repair-invalid)
+- User story 8
+- Functional requirements 15, 16, and 17
+- Acceptance criteria (AC-editor-window, AC-editor-close, AC-editor-save-command)
+- Risks and open questions (Q-editor-host resolved)
+- Glossary terms Command-line tool and Herdr
 
 ### Changed
 
+- Terms
 - Primary journey
-- Functional requirements (requirement 14)
+- In scope
+- Out of scope
 - UX and accessibility requirements
-- Risks and open questions (Q-open-invalid resolved)
+- Data, permissions, and operational requirements
+- Constraints and dependencies
 - Definition of done
+- Glossary row Editor
 
 ### Removed
 
@@ -20,7 +28,7 @@
 
 ## Terms
 
-This PRD uses these rows from [the glossary](../GLOSSARY.md): Manifest, JSON, SVG, Grid, Node, Edge, Node type, Node size, Validation, Diagram, Human reviewer, Agent, Editor.
+This PRD uses these rows from [the glossary](../GLOSSARY.md): Manifest, JSON, SVG, Grid, Node, Edge, Node type, Node size, Validation, Diagram, Human reviewer, Agent, Editor, Command-line tool, Herdr.
 
 ## Problem
 
@@ -61,10 +69,11 @@ Success means:
 5. A Human reviewer changes a label, an Edge, or a Grid position and can review a small change in both the Manifest and the SVG.
 6. A Human reviewer arranges a Diagram in the Editor by moving Nodes on the Grid, connecting Edges, and editing labels, and the saved Manifest contains those changes.
 7. A Human reviewer starts a new Diagram in the Editor when no Manifest exists, and the Editor creates a Manifest with no Nodes and no Edges.
+8. A Human reviewer starts the Editor from a terminal, works in the Editor window, and closes that window by closing the Command-line tool.
 
 ## Primary journey
 
-1. The Human reviewer creates a new Manifest in the Editor, or opens an existing Manifest.
+1. The Human reviewer starts the Editor from a terminal. The Command-line tool opens one Editor window for a new Manifest or an existing Manifest. The Human reviewer works in that window.
 2. A new Manifest has no Nodes and no Edges and passes Validation.
 3. The Human reviewer moves Nodes on the Grid, connects Edges, and edits labels.
 4. The Editor saves the Manifest only when the result passes Validation.
@@ -80,6 +89,10 @@ Editor constraint: a move, connection, Node type, or Node size that would make t
 
 Repair path: the Human reviewer opens a Manifest that parses and fails Validation. The Editor shows the Diagram and the text failure. The Editor saves only after Validation passes. A Manifest that does not parse shows the text failure and does not present an editable Diagram. The file on disk stays unchanged until that valid save.
 
+Close path: exiting the Command-line tool, or sending it a close request, closes the Editor window. Unsaved edits are not written. The Manifest and SVG on disk stay as they were.
+
+External save path: a save request sent to the Command-line tool asks the Editor for the current Diagram, then uses the same save rules as a save made in the Editor.
+
 ## In scope
 
 - A JSON Manifest as the only source of truth for one Diagram.
@@ -90,6 +103,9 @@ Repair path: the Human reviewer opens a Manifest that parses and fails Validatio
 - Validation that rejects a Manifest before any SVG is written.
 - An SVG that matches a valid Manifest and stays the same when the Manifest stays the same.
 - The Editor journey: start an empty Diagram, move Nodes on the Grid, connect Edges, edit labels, and save a valid Manifest.
+- The Editor window, owned by the Command-line tool, for the Manifest and SVG named when the Editor starts. One window per launch.
+- Close and save requests sent to that Command-line tool.
+- Herdr, or another pane host, may show that same Editor window. The Editor starts from any terminal without a pane host.
 - The Agent journey: edit the Manifest as text and produce an SVG without the Editor.
 - Text failures for malformed JSON, duplicate ids, Edges that do not end on a Node, overlapping Nodes, invalid Grid coordinates, and unsupported Node type or Node size values.
 - Refusing Editor changes that would fail Validation, without writing an invalid Manifest.
@@ -107,6 +123,8 @@ Assumption carried from the design documents, except the Editor, which this PRD 
 - Collaboration, accounts, comments, or hosted sharing.
 - A workflow runner.
 - Packaging for a specific desktop environment.
+- A browser tab as the Editor the Human reviewer works in.
+- Requiring Herdr, or any pane host, to open the Editor.
 - An editor that is a separate source of truth from the Manifest.
 
 ## Functional requirements
@@ -125,10 +143,14 @@ Assumption carried from the design documents, except the Editor, which this PRD 
 12. The Editor refuses a move, connection, Node type, or Node size that would make the Manifest invalid. It does not write an invalid Manifest. When a saved Manifest already exists, that file stays as it was.
 13. The Editor can create a new Manifest when none exists. The new Manifest has no Nodes and no Edges and passes Validation.
 14. When a Manifest parses and fails Validation, the Editor opens it, shows the text failure, and does not save until Validation passes. When a Manifest does not parse, the Editor shows the text failure and does not present an editable Diagram. The file on disk stays unchanged until a valid save.
+15. Starting the Editor opens one window owned by the Command-line tool, for the Manifest and SVG named at launch. The Human reviewer works in that window.
+16. A close request to the Command-line tool, or exiting that tool, closes the Editor window. Unsaved edits are not written. The Manifest and SVG on disk stay as they were.
+17. A save request to the Command-line tool asks the Editor for the current Diagram, then follows the same rules as a save from the Editor. Validation must pass before the Manifest is written and the SVG is produced.
 
 ## UX and accessibility requirements
 
-- The Editor shows the Diagram on a Grid and uses the predefined Node sizes.
+- The Editor shows the Diagram on a Grid, in a window owned by the Command-line tool, and uses the predefined Node sizes.
+- The Human reviewer does not work in a browser tab.
 - Node labels and Edge labels are text the Human reviewer can read and edit.
 - Validation failures are text, including when they are raised from the Editor.
 - A refused edit leaves the Diagram unchanged and explains the refusal in text.
@@ -145,6 +167,9 @@ Assumption carried from the design documents, except the Editor, which this PRD 
 - A successful Validation is what allows a new SVG to be written.
 - A failed Validation leaves any existing SVG byte-for-byte unchanged.
 - Local file access is the only data boundary in this PRD.
+- The Command-line tool process owns the Editor window for the Manifest and SVG named at launch.
+- A close request ends that window and does not write unsaved edits.
+- A save request uses the Editor's current Diagram and the save rules already in this PRD.
 
 ## Constraints and dependencies
 
@@ -152,7 +177,7 @@ Assumption carried from the design documents, except the Editor, which this PRD 
 - The generated picture is an SVG.
 - There is no existing product behavior to migrate. See [current product state](../CURRENT_PRODUCT_STATE.md).
 - No ticket is attached to this PRD.
-- This PRD binds observable behavior. Language, toolkit, and packaging choices are left to implementation.
+- This PRD binds observable behavior. The Command-line tool owns the Editor window. How that window is drawn is an implementation choice, provided the Human reviewer does not work in a browser tab. Packaging for a specific desktop environment stays out of scope.
 
 ## Risks and open questions
 
@@ -180,6 +205,15 @@ When a Manifest already on disk fails Validation, which behavior is required?
 
 Resolved in round 3. The Editor opens a Manifest that parses and fails Validation so the Human reviewer can change it, and it saves only after Validation passes. A Manifest that does not parse shows the text failure and does not present an editable Diagram. The file on disk stays unchanged until a valid save.
 
+### Q-editor-host
+
+Where does the Human reviewer work in the Editor, and what owns that window?
+
+- A browser tab the Human reviewer opens and closes.
+- A window owned by the Command-line tool, started from any terminal. Herdr may show that window and is not required. Close and save requests go to that tool.
+
+Resolved in round 4. The Command-line tool owns one Editor window per launch. The Human reviewer works in that window. Exiting the tool, or a close request, closes the window and does not write unsaved edits. A save request asks the Editor for the current Diagram and then uses the Editor save rules. Herdr may show the window. The Editor starts without Herdr.
+
 ## Acceptance criteria
 
 - **AC-read-manifest.** Given a valid Manifest, a Human reviewer can list every Node id, Node type, Node size, label, and Grid position, and every Edge's endpoints and label, without using the SVG.
@@ -195,9 +229,12 @@ Resolved in round 3. The Editor opens a Manifest that parses and fails Validatio
 - **AC-refuse-invalid-edit.** Given a move, connection, Node type, or Node size that would fail Validation, the Editor refuses it, explains the refusal in text, and does not write that change. A Manifest that was valid stays valid. A Manifest that was already invalid stays unchanged.
 - **AC-empty-start.** Given no Manifest, the Human reviewer can create one from the Editor. The new Manifest has no Nodes and no Edges, passes Validation, and renders to an SVG with no Nodes and no Edges.
 - **AC-repair-invalid.** Given a Manifest that parses and fails Validation, the Editor opens it, shows the text failure, and does not save until Validation passes. Given a Manifest that does not parse, the Editor shows the text failure and does not present an editable Diagram. The file on disk stays unchanged until a valid save.
+- **AC-editor-window.** Given the Human reviewer starts the Editor from a terminal, one Editor window opens, owned by the Command-line tool, for the Manifest and SVG named at launch. The Human reviewer works in that window.
+- **AC-editor-close.** Given an open Editor window, a close request or exiting the Command-line tool closes that window. The Manifest and SVG on disk stay as they were when the Diagram was not saved.
+- **AC-editor-save-command.** Given an open Editor window, a save request to the Command-line tool writes the Manifest and produces the SVG when Validation passes, and writes neither when Validation fails.
 
 ## Definition of done
 
-- AC-read-manifest, AC-agent-render, AC-svg-matches, AC-deterministic, AC-editor-roundtrip, AC-invalid-manifest, AC-preserve-svg, AC-reviewable-change, AC-grid-positions, AC-no-execution, AC-refuse-invalid-edit, AC-empty-start, and AC-repair-invalid pass.
+- AC-read-manifest, AC-agent-render, AC-svg-matches, AC-deterministic, AC-editor-roundtrip, AC-invalid-manifest, AC-preserve-svg, AC-reviewable-change, AC-grid-positions, AC-no-execution, AC-refuse-invalid-edit, AC-empty-start, AC-repair-invalid, AC-editor-window, AC-editor-close, and AC-editor-save-command pass.
 - The Human reviewer and the Agent can each complete their journey on one shared Manifest.
 - Out-of-scope items are not required to call this version done.

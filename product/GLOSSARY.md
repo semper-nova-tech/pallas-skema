@@ -20,4 +20,6 @@ Actors are confirmed in [PERSONAS.md](PERSONAS.md).
 | Diagram | The flow a Manifest describes. It is a picture of a flow, not executable automation. | workflow, pipeline, script |
 | Human reviewer | The person who reads a Manifest, reviews an SVG, and arranges a Diagram in the Editor. | user, author, person |
 | Agent | The actor that edits a Manifest as text and produces an SVG without the Editor. | coding agent, LLM |
-| Editor | The visual client the Human reviewer uses to move Nodes, connect Edges, and edit labels. It reads and writes a Manifest. | GUI, canvas, desktop app |
+| Editor | The window the Human reviewer uses to move Nodes, connect Edges, and edit labels. The Command-line tool owns it. It reads and writes a Manifest. | browser tab, GUI as a separate source of truth |
+| Command-line tool | The local program that validates a Manifest, renders an SVG, and owns the Editor window. It accepts close and save requests for that window. | browser, hosted service |
+| Herdr | An optional local pane host that may show the Editor window. The Editor does not require it. | required shell, Pallas Agent Flow worker |

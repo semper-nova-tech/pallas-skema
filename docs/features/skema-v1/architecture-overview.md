@@ -4,7 +4,7 @@ Status: planned
 ## Today → After
 
 - **Today:** The repository is documentation only. There is no validator, SVG renderer, command-line tool, Editor, or checked-in Manifest (Discovery index DISC-index v1 at `848e096e`).
-- **After:** A Rust command-line tool owns Validation and Render on local Manifest and SVG files. The same Validation outcome gates every SVG write for the Agent path and the Editor save path. An Angular Editor opens from the command-line tool in a Herdr pane, accepts a JSON Manifest handoff, and persists only valid Manifests. The Human reviewer gets SVG after a valid Editor save; the Agent gets SVG by invoking Render without the Editor.
+- **After:** A Rust command-line tool owns Validation and Render on local Manifest and SVG files. The same Validation outcome gates every SVG write for the Agent path and the Editor save path. open-editor stays running and owns one Editor window for the JSON Manifest handoff. The Angular Editor is shown in that window. Close and save requests go to that process. Herdr may show the window and is not required. The Human reviewer gets SVG after a valid Editor save; the Agent gets SVG by invoking Render without the Editor.
 
 ## Manifest (model)
 
@@ -32,15 +32,15 @@ Status: planned
 
 - **Owner:** Backend
 - **Input:** Workspace paths for Manifest and SVG; subcommands validate, render, and open-editor
-- **Output:** Exit code zero on success; Text failure on stderr and non-zero exit on errors; open-editor writes JSON handoff only (no Herdr pane until PR-04)
+- **Output:** Exit code zero on success; Text failure on stderr and non-zero exit on errors. open-editor stays running, owns the Editor window, and accepts close and save until the process exits.
 - **Invariants:** Render subcommand runs Validation first; Agent path uses the same library Validation and Render as the Editor save path
-- **Implementation (PR-02):** Binary `skema` in crate `skema`; `skema::cli::run_validate`, `run_render`, and `run_open_editor`; handoff payload `EditorJsonHandoff` with `manifestJson`, `manifestPath`, and `svgPath`
+- **Shipped today:** Binary `skema` in crate `skema` writes the JSON handoff (`manifestJson`, `manifestPath`, `svgPath`) and exits. Window ownership, close, and save are specified and not built.
 
 ## Editor launch (contract)
 
-- **Owner:** Infrastructure (local pane only)
+- **Owner:** Backend
 - **Input:** JSON Manifest (initial or empty template), workspace paths for Manifest and SVG
-- **Behavior:** Command-line tool opens one Angular Editor in a Herdr pane with the JSON handoff (Decision JSON handoff D-004). No hosted webpage or upload (Decision Webpage later D-005).
+- **Behavior:** The Rust command-line tool opens one Editor window that it owns and shows the Angular Editor there (Decision Editor window D-003, Decision JSON handoff D-004). A close request, or exiting the process, closes the window and does not write unsaved edits. A save request asks the Editor for the current Diagram, then uses the Editor save path. Herdr may show that window and is not required. No hosted webpage or upload (Decision Local window D-005).
 
 ## Editor persistence (contract)
 
@@ -67,14 +67,15 @@ flowchart LR
   subgraph frontend [Angular Editor]
     Ed[Editor]
   end
-  subgraph infra [Local pane]
-    Herdr[Herdr pane launch]
-  end
+  Win[Editor window]
+  Herdr[Herdr pane optional]
   Agent[Agent] -->|edit Manifest text| CLI
   CLI -->|render command| Rend
   Human[Human reviewer] --> CLI
-  CLI --> Herdr
-  Herdr --> Ed
+  CLI --> Win
+  Win --> Ed
+  Herdr -.-> Win
+  CLI -->|close or save| Win
   Ed -->|save after Validation| Val
   Ed -->|after valid save| Rend
   Rend --> SVG[SVG file]

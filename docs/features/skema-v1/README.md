@@ -5,9 +5,9 @@ Pallas Skema v1 turns the approved product spec into a runnable local product: a
 
 ## Systems touched
 
-- **Backend:** JSON Manifest model, Validation, SVG Render, and a Rust command-line tool that validates, renders, and opens the Editor with a JSON Manifest handoff.
+- **Backend:** JSON Manifest model, Validation, SVG Render, and a Rust command-line tool that validates, renders, and owns the Editor window for a JSON Manifest handoff.
 - **Frontend:** Angular Editor for empty start, Grid roundtrip, refuse-invalid-edit, and repair-invalid flows; Editor save runs Validation before persisting and triggers the same Render the Agent uses via the command-line tool.
-- **Infrastructure (local only):** Herdr pane launch so the command-line tool opens one Editor instance in a pane—no second terminal canvas, no hosting or upload in this version.
+- **Editor window:** The Rust command-line tool owns one Editor window per launch, shows the Angular Editor in it, and accepts close and save. Any terminal can start it. Herdr may show that window and is not required. No hosting or upload in this version.
 
 ## End state
 
