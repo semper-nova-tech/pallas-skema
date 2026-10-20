@@ -20,7 +20,7 @@ pub enum CliInvocation {
     OpenEditor {
         manifest_path: String,
         svg_path: String,
-        handoff_out: String,
+        handoff_out: Option<String>,
     },
 }
 
@@ -38,12 +38,15 @@ pub fn run_render(manifest_path: &Path, svg_path: &Path) -> Result<(), TextFailu
     render_manifest(&manifest, svg_path).map(|_| ())
 }
 
-/// Write Editor JSON handoff payload; does not launch a pane (wire: runOpenEditor).
-pub fn run_open_editor(
-    manifest_path: &Path,
-    svg_path: &Path,
-    handoff_out: &Path,
-) -> Result<(), TextFailure> {
+/// Write a PNG of the Manifest; Validation runs first (wire: runRenderPng).
+pub fn run_render_png(manifest_path: &Path, png_path: &Path) -> Result<(), TextFailure> {
+    let json = read_manifest_text(manifest_path)?;
+    let manifest = parse_manifest(&json)?;
+    skema_core::render_png(&manifest, png_path)
+}
+
+/// Build the Editor handoff for the launch paths. A missing Manifest yields a valid empty one.
+pub fn handoff_for(manifest_path: &Path, svg_path: &Path) -> Result<EditorJsonHandoff, TextFailure> {
     let manifest_json = if manifest_path.exists() {
         read_manifest_text(manifest_path)?
     } else {
@@ -51,12 +54,20 @@ pub fn run_open_editor(
         validate_manifest(&empty)?;
         serialize_manifest(&empty)
     };
-
-    let payload = EditorJsonHandoff {
+    Ok(EditorJsonHandoff {
         manifest_json,
         manifest_path: path_to_string(manifest_path)?,
         svg_path: path_to_string(svg_path)?,
-    };
+    })
+}
+
+/// Write Editor JSON handoff payload to a file (wire: runOpenEditor, handoff mode).
+pub fn run_open_editor(
+    manifest_path: &Path,
+    svg_path: &Path,
+    handoff_out: &Path,
+) -> Result<(), TextFailure> {
+    let payload = handoff_for(manifest_path, svg_path)?;
 
     if let Some(parent) = handoff_out.parent() {
         if !parent.as_os_str().is_empty() {
@@ -99,7 +110,7 @@ fn path_to_string(path: &Path) -> Result<String, TextFailure> {
     })
 }
 
-fn io_failure(err: &std::io::Error) -> TextFailure {
+pub(crate) fn io_failure(err: &std::io::Error) -> TextFailure {
     TextFailure {
         message: format!("I/O error: {err}"),
         location: None,

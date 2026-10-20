@@ -9,7 +9,8 @@
   "radius": 8,
   "nodeBorder": 1,
   "edgeWidth": "1.5",
-  "dotRadius": "1.2",
+  "edgeHead": 8,
+  "dotRadius": "2",
   "dotOffset": 8,
   "labelSize": 13,
   "metaSize": 11,
@@ -18,9 +19,18 @@
   "textGap": 2,
   "textPadX": 9,
   "nodes": {
-    "small": { "width": 104, "height": 44 },
-    "medium": { "width": 128, "height": 52 },
-    "large": { "width": 156, "height": 60 }
+    "small": {
+      "width": 104,
+      "height": 44
+    },
+    "medium": {
+      "width": 128,
+      "height": 52
+    },
+    "large": {
+      "width": 156,
+      "height": 60
+    }
   },
   "color": {
     "ink": "#050b05",
@@ -29,10 +39,7 @@
     "nodeFill": "#0d1a0d",
     "phosphor": "#a3e4a4",
     "phosphorDim": "#769676",
-    "dot": "#364f37",
-    "amber": "#dbb970",
-    "amberText": "#f0dcb1",
-    "amberDim": "#bca880",
+    "dot": "#55805a",
     "line": "#85b286",
     "frame": "#365036"
   }

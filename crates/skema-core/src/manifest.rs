@@ -15,6 +15,9 @@ pub struct ManifestDocument {
 pub struct Node {
     pub id: String,
     pub label: String,
+    /// Optional longer text shown under the label (wire field: description).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     #[serde(rename = "type")]
     pub node_type: NodeType,
     pub size: NodeSize,

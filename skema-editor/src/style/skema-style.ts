@@ -16,6 +16,7 @@ export interface SkemaStyle {
   radius: number;
   nodeBorder: number;
   edgeWidth: string;
+  edgeHead: number;
   dotRadius: string;
   dotOffset: number;
   labelSize: number;
@@ -37,9 +38,6 @@ export interface SkemaStyle {
     phosphor: string;
     phosphorDim: string;
     dot: string;
-    amber: string;
-    amberText: string;
-    amberDim: string;
     line: string;
     frame: string;
   };
@@ -61,9 +59,6 @@ export function applySkemaStyle(root: HTMLElement): void {
   set('--phosphor', color.phosphor);
   set('--phosphor-dim', color.phosphorDim);
   set('--dot', color.dot);
-  set('--amber', color.amber);
-  set('--amber-text', color.amberText);
-  set('--amber-dim', color.amberDim);
   set('--line', color.line);
   set('--frame', color.frame);
   set('--font-family', skemaStyle.fontFamily);

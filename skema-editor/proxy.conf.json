@@ -3,5 +3,10 @@
     "target": "http://localhost:3927",
     "secure": false,
     "changeOrigin": true
+  },
+  "/handoff.json": {
+    "target": "http://localhost:3927",
+    "secure": false,
+    "changeOrigin": true
   }
 }

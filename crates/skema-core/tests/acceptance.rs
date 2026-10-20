@@ -113,7 +113,8 @@ fn ac_svg_matches() {
     let svg = out.as_str();
     assert!(svg.contains("Start process"));
     assert!(svg.contains("Choose path"));
-    assert!(svg.contains("<line "));
+    assert!(svg.contains("<path d=\"M"), "edges are routed paths");
+    assert!(svg.contains("<polygon points="), "edges end in arrowheads");
     assert!(svg.starts_with("<svg "));
     let _ = fs::remove_file(&path);
 }

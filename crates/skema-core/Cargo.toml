@@ -5,6 +5,7 @@ edition = "2021"
 description = "Manifest v1 model, Grid rules, Validation, and Render for Pallas Skema"
 
 [dependencies]
+resvg = "0.48.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

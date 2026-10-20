@@ -1,0 +1,10 @@
+[package]
+name = "skema-tui"
+version = "0.1.0"
+edition = "2021"
+description = "Terminal Editor for Pallas Skema v1: arrange a Diagram on the Grid in a pane"
+
+[dependencies]
+crossterm = "0.29"
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
+skema-core = { path = "../skema-core" }
