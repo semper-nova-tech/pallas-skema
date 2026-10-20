@@ -19,6 +19,7 @@ pub struct DiagramStyle {
     pub radius: i64,
     pub node_border: i64,
     pub edge_width: String,
+    pub edge_head: i64,
     pub dot_radius: String,
     pub dot_offset: i64,
     pub label_size: i64,

@@ -27,9 +27,12 @@ is non-zero, and an existing SVG is left byte-for-byte unchanged.
 
 ```bash
 skema render --manifest flow.json --svg flow.svg
+skema render --manifest flow.json --svg flow.svg --png flow.png   # also a PNG
 ```
 
-`skema validate --manifest flow.json` checks without writing anything.
+`skema validate --manifest flow.json` checks without writing anything. The PNG
+is rasterized from the same SVG with the same embedded font, at 2 pixels per
+SVG unit.
 
 ## Editor (terminal)
 
@@ -53,12 +56,16 @@ skema open-editor --manifest flow.json --svg flow.svg
 - Every accepted edit is saved at once: the Manifest is written, then the SVG
   is rendered. An edit that fails Validation is refused and writes nothing, so
   the files on disk are always valid. `s` forces a save. Pass `--manual-save`
-  to write only on `s`; then `q` asks once if there are unsaved edits.
+  to write only on `s`. `q` saves before quitting; only a Diagram that fails
+  Validation stays open, and a second `q` discards it.
+- The Copy image button, or `y`, puts a PNG of the Diagram on the system
+  clipboard as a picture, ready to paste into chat or a document (AppleScript
+  on macOS, `wl-copy` or `xclip` on Linux). `Y` copies the SVG markup as text.
 
 Keys: `tab` and `shift+tab` cycle through Nodes and then Edges, arrows move the
 selected Node, `enter` (or a double-click) opens it for editing, `a` add,
 `c` connect (press on the source, then click the target or tab to it and press `c` again), `x` delete,
-`+` `-` zoom, `0` fit to pane, `s` force a save, `r` reload, `q` quit.
+`+` `-` zoom, `0` fit to pane, `y` copy image, `Y` copy SVG text, `s` force a save, `r` reload, `q` quit.
 
 In the Node editor, up and down pick a field (label, description, size),
 `enter` edits it (size cycles), `enter` again saves the field, and `esc` steps
@@ -66,7 +73,14 @@ back out. Every field change goes through Validation like a move. The Node
 type stays in the Manifest for agents and is not shown in the Editor.
 
 Zooming out stops at the level where the whole Diagram fits the pane, decided
-by whichever of width or height runs out first.
+by whichever of width or height runs out first. The mouse wheel scrolls the
+canvas (shift for sideways); the view follows the selection again as soon as
+it changes.
+
+The SVG and the terminal view share one drawing rule set: Edges leave and
+enter at side midpoints, run orthogonally with an arrowhead at the target, a
+second Edge into a side takes the next-best side, labels ride the top edge,
+and descriptions fill the box.
 
 ## Herdr pane
 

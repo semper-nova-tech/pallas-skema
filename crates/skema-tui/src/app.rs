@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use crate::clipboard;
 use skema_core::{
     format_text_failure, parse_manifest, render_manifest, serialize_manifest, validate_manifest,
     Edge, GridPosition, ManifestDocument, Node, NodeSize, NodeType, TextFailure,
@@ -74,6 +75,15 @@ pub enum Mode {
     Connect { from: String },
 }
 
+/// Clickable panel buttons.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Button {
+    CopyImage,
+    AddNode,
+}
+
+pub const FLASH: std::time::Duration = std::time::Duration::from_millis(180);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StatusKind {
     Info,
@@ -103,6 +113,10 @@ pub struct App {
     pub should_quit: bool,
     /// Viewport offset into the drawing surface, in characters.
     pub scroll: (i64, i64),
+    /// Drawing surface size at the current zoom, set by the last frame, for clamping scroll.
+    pub surface: (i64, i64),
+    /// Keep the selected Node in view on the next frame. Cleared by a manual scroll.
+    pub follow: bool,
     /// Grid cell the dragged Node would snap to, shown as a ghost until release.
     pub drag_ghost: Option<(i64, i64)>,
     /// Mouse connect in progress: source Node id and the Node under the cursor, if any.
@@ -112,6 +126,8 @@ pub struct App {
     pub hover_edge: Option<usize>,
     /// Write the Manifest and SVG after every accepted edit.
     pub autosave: bool,
+    /// A panel button that was just clicked, shown inverted until the instant passes.
+    pub flash: Option<(Button, std::time::Instant)>,
     /// Zoom level index into `geometry::ZOOMS`.
     pub zoom: usize,
     /// Largest level at which the whole Diagram fits the pane; the floor for zooming out.
@@ -120,7 +136,7 @@ pub struct App {
     pub disk_changed: bool,
 }
 
-const KEYS_HINT: &str = "tab next  ←↑↓→ move  ⏎ edit  a add  c connect, then click  x delete  + - zoom  0 fit  s save  q quit";
+const KEYS_HINT: &str = "tab next  ←↑↓→ move  ⏎ edit  a add  c connect, then click  x delete  + - zoom  0 fit  y copy image  Y copy svg  s save  q quit";
 
 impl App {
     pub fn open(manifest_path: &Path, svg_path: &Path) -> App {
@@ -138,11 +154,14 @@ impl App {
             quit_armed: false,
             should_quit: false,
             scroll: (0, 0),
+            surface: (0, 0),
+            follow: true,
             drag_ghost: None,
             link_preview: None,
             hover_node: None,
             hover_edge: None,
             autosave: true,
+            flash: None,
             zoom: crate::geometry::DEFAULT_ZOOM,
             fit_zoom: 0,
             disk_mtime: None,
@@ -271,6 +290,7 @@ impl App {
         } else {
             (current + delta).rem_euclid(total)
         };
+        self.follow = true;
         if (next as usize) < doc.nodes.len() {
             self.selected = Some(doc.nodes[next as usize].id.clone());
             self.focus = Focus::Nodes;
@@ -354,6 +374,7 @@ impl App {
     pub fn select_id(&mut self, id: &str) {
         self.selected = Some(id.to_owned());
         self.focus = Focus::Nodes;
+        self.follow = true;
     }
 
     // ----- edits (all validated) --------------------------------------------
@@ -397,6 +418,7 @@ impl App {
             self.info("nothing selected · a adds a Node");
             return;
         };
+        self.follow = true;
         self.try_apply(|doc| {
             let node = doc.nodes.iter_mut().find(|n| n.id == id).ok_or("no Node selected")?;
             node.grid_position = GridPosition {
@@ -625,12 +647,23 @@ impl App {
         self.info("");
     }
 
+    // ----- scroll -----------------------------------------------------------
+
+    /// Mouse wheel: move the viewport and stop following the selection until it changes.
+    pub fn scroll_by(&mut self, dx: i64, dy: i64, viewport: (i64, i64)) {
+        let max_x = (self.surface.0 - viewport.0).max(0);
+        let max_y = (self.surface.1 - viewport.1).max(0);
+        self.scroll = ((self.scroll.0 + dx).clamp(0, max_x), (self.scroll.1 + dy).clamp(0, max_y));
+        self.follow = false;
+    }
+
     // ----- zoom -------------------------------------------------------------
 
     pub fn zoom_in(&mut self) {
         if self.zoom + 1 < crate::geometry::ZOOMS.len() {
             self.zoom += 1;
             self.scroll = (0, 0);
+            self.follow = true;
         }
     }
 
@@ -639,6 +672,7 @@ impl App {
         if self.zoom > self.fit_zoom {
             self.zoom -= 1;
             self.scroll = (0, 0);
+            self.follow = true;
         } else {
             self.info("already fits the pane · + zooms in");
         }
@@ -680,13 +714,102 @@ impl App {
         ));
     }
 
+    /// Quit saves first. Only a Manifest that cannot be saved (it fails Validation)
+    /// keeps the Editor open, and a second `q` then discards the edits.
     pub fn request_quit(&mut self) {
         if self.dirty && !self.quit_armed {
-            self.quit_armed = true;
-            self.fail("unsaved edits · q again discards them, s saves");
-            return;
+            self.save();
+            if self.dirty {
+                self.quit_armed = true;
+                let why = self.status.text.trim_start_matches("✗ ").trim_end_matches(" · not saved").to_owned();
+                self.fail(format!("✗ {why} · fix it, or q again to discard the edits"));
+                return;
+            }
         }
         self.should_quit = true;
+    }
+
+    /// Copy the Diagram to the clipboard as a PNG image. Saves first so the
+    /// picture matches the Diagram on screen.
+    pub fn copy_png(&mut self) {
+        if self.dirty {
+            self.save();
+            if self.dirty {
+                return; // save() already explained the refusal
+            }
+        }
+        let Some(doc) = &self.manifest else { return };
+        let png = match skema_core::render_png_bytes(doc) {
+            Ok(p) => p,
+            Err(f) => {
+                self.fail(format!("✗ {} · nothing copied", format_text_failure(&f)));
+                return;
+            }
+        };
+        match clipboard::copy_png(&png) {
+            Ok(how) => self.ok(format!("✓ copied the Diagram as PNG via {how} ({} KB)", png.len() / 1024)),
+            Err(e) => self.fail(format!("✗ clipboard: {e}")),
+        }
+    }
+
+    /// Copy the current SVG markup to the system clipboard as text.
+    pub fn copy_svg(&mut self) {
+        if self.dirty {
+            self.save();
+            if self.dirty {
+                return; // save() already explained the refusal
+            }
+        }
+        if !self.svg_path.exists() {
+            if let Some(doc) = &self.manifest {
+                if let Err(f) = render_manifest(doc, &self.svg_path) {
+                    self.fail(format!("✗ {} · nothing copied", format_text_failure(&f)));
+                    return;
+                }
+            }
+        }
+        let bytes = match fs::read(&self.svg_path) {
+            Ok(b) => b,
+            Err(e) => {
+                self.fail(format!("✗ cannot read SVG: {e}"));
+                return;
+            }
+        };
+        match clipboard::copy(&bytes) {
+            Ok(how) => self.ok(format!(
+                "✓ copied {} markup via {how} ({} KB)",
+                file_name(&self.svg_path),
+                bytes.len() / 1024
+            )),
+            Err(e) => self.fail(format!("✗ clipboard: {e}")),
+        }
+    }
+
+    // ----- buttons ----------------------------------------------------------
+
+    /// Flash the button, then run its action.
+    pub fn press(&mut self, button: Button) {
+        self.flash = Some((button, std::time::Instant::now() + FLASH));
+        match button {
+            Button::CopyImage => self.copy_png(),
+            Button::AddNode => self.add_node(),
+        }
+    }
+
+    pub fn flashing(&self, button: Button) -> bool {
+        self.flash.is_some_and(|(b, until)| b == button && std::time::Instant::now() < until)
+    }
+
+    /// Drop an expired flash. Returns true while one is still showing.
+    pub fn tick_flash(&mut self) -> bool {
+        match self.flash {
+            Some((_, until)) if std::time::Instant::now() < until => true,
+            Some(_) => {
+                self.flash = None;
+                false
+            }
+            None => false,
+        }
     }
 
     // ----- status -----------------------------------------------------------
@@ -1001,15 +1124,24 @@ mod tests {
     }
 
     #[test]
-    fn quit_with_unsaved_edits_asks_once() {
+    fn quit_saves_first_and_only_an_invalid_manifest_asks_again() {
         let dir = temp_dir("quit");
         let mut app = open_with(&dir, &two_nodes());
         app.select_id("a");
         app.move_selected(0, 1);
         app.request_quit();
-        assert!(!app.should_quit);
+        assert!(app.should_quit, "valid edits are saved on quit");
+        let on_disk = parse_manifest(&fs::read_to_string(dir.join("flow.json")).unwrap()).unwrap();
+        assert_eq!(on_disk.nodes[0].grid_position, GridPosition { x: 0, y: 1 });
+
+        let mut app = open_with(&dir, &two_nodes());
+        app.manifest.as_mut().unwrap().edges.push(Edge { from: "a".into(), to: "ghost".into(), label: None });
+        app.dirty = true;
         app.request_quit();
-        assert!(app.should_quit);
+        assert!(!app.should_quit, "an unsaveable Manifest stays open once");
+        assert!(app.status.text.contains("ghost"), "{}", app.status.text);
+        app.request_quit();
+        assert!(app.should_quit, "second q discards");
     }
 
     fn bump_mtime(path: &Path) {

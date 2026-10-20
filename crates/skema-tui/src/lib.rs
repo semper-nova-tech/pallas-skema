@@ -2,6 +2,7 @@
 
 pub mod app;
 pub mod canvas;
+pub mod clipboard;
 pub mod geometry;
 pub mod ui;
 
@@ -16,7 +17,7 @@ use crossterm::event::{
 use crossterm::execute;
 use skema_core::TextFailure;
 
-use app::{App, Mode};
+use app::{App, Button, Mode};
 use geometry::ZOOMS;
 use ui::{CanvasView, Hits};
 use canvas::edge_at;
@@ -45,8 +46,12 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
             hits = ui::draw(frame, app);
             view = hits.canvas;
         })?;
-        if !event::poll(Duration::from_millis(250))? {
-            app.check_disk();
+        // Redraw quickly while a button flash is showing; otherwise poll the disk.
+        let wait = if app.tick_flash() { Duration::from_millis(30) } else { Duration::from_millis(250) };
+        if !event::poll(wait)? {
+            if app.flash.is_none() {
+                app.check_disk();
+            }
             continue;
         }
         let event = event::read()?;
@@ -54,8 +59,11 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
         match event {
             Event::Key(key) if key.kind == KeyEventKind::Press => handle_key(app, key.code, key.modifiers),
             Event::Mouse(mouse) => match mouse.kind {
+                MouseEventKind::Down(MouseButton::Left) if in_rect(hits.copy_button, mouse.column, mouse.row) => {
+                    app.press(Button::CopyImage);
+                }
                 MouseEventKind::Down(MouseButton::Left) if in_rect(hits.add_button, mouse.column, mouse.row) => {
-                    app.add_node();
+                    app.press(Button::AddNode);
                 }
                 // Panel: clicking an Edge row picks it; a second click opens the editor.
                 MouseEventKind::Down(MouseButton::Left)
@@ -117,6 +125,20 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                         }
                         (_, None) => {}
                     }
+                }
+                // Wheel: scroll the canvas. Shift turns vertical into horizontal.
+                MouseEventKind::ScrollDown | MouseEventKind::ScrollUp | MouseEventKind::ScrollLeft | MouseEventKind::ScrollRight => {
+                    let viewport = (view.area.width as i64, view.area.height as i64);
+                    let shift = mouse.modifiers.contains(KeyModifiers::SHIFT);
+                    let (dx, dy) = match mouse.kind {
+                        MouseEventKind::ScrollDown if shift => (4, 0),
+                        MouseEventKind::ScrollUp if shift => (-4, 0),
+                        MouseEventKind::ScrollDown => (0, 2),
+                        MouseEventKind::ScrollUp => (0, -2),
+                        MouseEventKind::ScrollRight => (4, 0),
+                        _ => (-4, 0),
+                    };
+                    app.scroll_by(dx, dy, viewport);
                 }
                 // Hover: highlight the Node or Edge under the cursor; in connect mode
                 // also preview the Edge to the hovered Node.
@@ -284,6 +306,8 @@ fn handle_key(app: &mut App, code: KeyCode, mods: KeyModifiers) {
         KeyCode::Char('+') | KeyCode::Char('=') => app.zoom_in(),
         KeyCode::Char('-') | KeyCode::Char('_') => app.zoom_out(),
         KeyCode::Char('0') => app.zoom_fit(),
+        KeyCode::Char('y') => app.copy_png(),
+        KeyCode::Char('Y') => app.copy_svg(),
         KeyCode::Up | KeyCode::Char('k') => app.move_selected(0, -1),
         KeyCode::Down | KeyCode::Char('j') => app.move_selected(0, 1),
         KeyCode::Left | KeyCode::Char('h') => app.move_selected(-1, 0),

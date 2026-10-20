@@ -49,7 +49,7 @@ impl Rect {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Side {
     Left,
     Right,
@@ -138,21 +138,22 @@ pub fn ports(rect: &Rect) -> [Port; 4] {
     ]
 }
 
-/// The side-midpoint port facing a target point. The offset is measured in
-/// half-box units so a wide, short terminal box still picks top or bottom when
-/// the target sits above or below it.
-pub fn facing_port(rect: &Rect, toward_col: i64, toward_row: i64) -> Port {
+/// The four side-midpoint ports ordered by how squarely each faces a point.
+/// The offset is measured in half-box units so a wide, short terminal box still
+/// prefers top or bottom when the target sits above or below it.
+pub fn ranked_ports(rect: &Rect, toward_col: i64, toward_row: i64) -> [Port; 4] {
     let (cc, cr) = rect.center();
     let dx = (toward_col - cc) as f64 / (rect.w as f64 / 2.0).max(1.0);
     let dy = (toward_row - cr) as f64 / (rect.h as f64 / 2.0).max(1.0);
     let [left, right, top, bottom] = ports(rect);
-    if dx.abs() >= dy.abs() {
-        if dx >= 0.0 { right } else { left }
-    } else if dy >= 0.0 {
-        bottom
-    } else {
-        top
-    }
+    let mut scored = [(dx, right), (-dx, left), (dy, bottom), (-dy, top)];
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    [scored[0].1, scored[1].1, scored[2].1, scored[3].1]
+}
+
+/// The port that faces a point best.
+pub fn facing_port(rect: &Rect, toward_col: i64, toward_row: i64) -> Port {
+    ranked_ports(rect, toward_col, toward_row)[0]
 }
 
 /// Orthogonal route from a source port to a target port, as polyline corners.

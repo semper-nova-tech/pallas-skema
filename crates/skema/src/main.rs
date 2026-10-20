@@ -24,6 +24,9 @@ enum Commands {
         manifest: PathBuf,
         #[arg(long)]
         svg: PathBuf,
+        /// Also write a PNG of the same Diagram (2 pixels per SVG unit).
+        #[arg(long)]
+        png: Option<PathBuf>,
     },
     /// Open the terminal Editor for one Manifest and SVG in this terminal.
     OpenEditor {
@@ -44,7 +47,11 @@ fn main() {
     let cli = Cli::parse();
     let result = match cli.command {
         Commands::Validate { manifest } => run_validate(&manifest),
-        Commands::Render { manifest, svg } => run_render(&manifest, &svg),
+        Commands::Render { manifest, svg, png } => run_render(&manifest, &svg)
+            .and_then(|()| match png {
+                Some(png) => skema::cli::run_render_png(&manifest, &png),
+                None => Ok(()),
+            }),
         Commands::OpenEditor {
             manifest,
             svg,

@@ -74,6 +74,32 @@ fn cli_render_writes_svg() {
 }
 
 #[test]
+fn cli_render_png_writes_a_png_beside_the_svg() {
+    let dir = workspace_temp("render-png");
+    fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("manifest.json");
+    fs::copy(golden_manifest(), &manifest).unwrap();
+    let svg = dir.join("diagram.svg");
+    let png = dir.join("diagram.png");
+    let status = Command::new(skema_bin())
+        .args([
+            "render",
+            "--manifest",
+            manifest.to_str().unwrap(),
+            "--svg",
+            svg.to_str().unwrap(),
+            "--png",
+            png.to_str().unwrap(),
+        ])
+        .status()
+        .expect("spawn skema");
+    assert!(status.success());
+    let bytes = fs::read(&png).unwrap();
+    assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn cli_render_fails_validation_without_changing_svg() {
     let dir = workspace_temp("render-fail-preserve");
     fs::create_dir_all(&dir).unwrap();

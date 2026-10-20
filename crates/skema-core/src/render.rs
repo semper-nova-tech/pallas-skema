@@ -1,10 +1,16 @@
 use std::fs;
 use std::path::Path;
 
-use crate::manifest::{ManifestDocument, Node};
+use crate::manifest::{ManifestDocument, Node, NodeType};
 use crate::style::{diagram_style, node_box, DiagramStyle};
 use crate::svg::SvgOutput;
 use crate::validation::{validate_manifest, TextFailure};
+
+/// SVG markup for a Manifest that passes Validation, without touching disk.
+pub fn render_svg_string(manifest: &ManifestDocument) -> Result<String, TextFailure> {
+    validate_manifest(manifest)?;
+    Ok(build_svg(manifest))
+}
 
 /// Produce SVG from a Manifest that passes Validation (wire: renderManifest).
 pub fn render_manifest(
@@ -39,8 +45,6 @@ pub fn render_manifest(
 fn build_svg(manifest: &ManifestDocument) -> String {
     let style = diagram_style();
     let nodes: Vec<&Node> = manifest.nodes.iter().collect();
-    let edges: Vec<_> = manifest.edges.iter().collect();
-
     let (width, height) = canvas_size(style, &nodes);
     let color = &style.color;
 
@@ -60,14 +64,9 @@ fn build_svg(manifest: &ManifestDocument) -> String {
         fill = color.dot,
     ));
     out.push('\n');
-    out.push_str(&format!(
-        r#"<rect width="{width}" height="{height}" fill="{fill}"/>"#,
-        fill = color.canvas,
-    ));
+    out.push_str(&format!(r#"<rect width="{width}" height="{height}" fill="{}"/>"#, color.canvas));
     out.push('\n');
-    out.push_str(&format!(
-        r#"<rect width="{width}" height="{height}" fill="url(#skema-dots)"/>"#
-    ));
+    out.push_str(&format!(r#"<rect width="{width}" height="{height}" fill="url(#skema-dots)"/>"#));
     out.push('\n');
     out.push_str(&format!(
         r#"<rect x="0.5" y="0.5" width="{}" height="{}" fill="none" stroke="{}" stroke-width="1"/>"#,
@@ -77,39 +76,76 @@ fn build_svg(manifest: &ManifestDocument) -> String {
     ));
     out.push('\n');
 
-    for edge in edges {
-        if let (Some(from), Some(to)) = (
+    // Edges: orthogonal routes between side-midpoint ports, arrowhead at the target,
+    // label on the longest segment. Same rules as the terminal Editor.
+    let mut labels = String::new();
+    // A target side already used by another Edge yields to the next-best side, so
+    // arrowheads and labels do not pile onto one port.
+    let mut taken: std::collections::HashSet<(String, Side)> = std::collections::HashSet::new();
+    for edge in &manifest.edges {
+        let (Some(from), Some(to)) = (
             nodes.iter().find(|n| n.id == edge.from),
             nodes.iter().find(|n| n.id == edge.to),
-        ) {
-            let (fx, fy) = node_center(style, from);
-            let (tx, ty) = node_center(style, to);
-            let (x1, y1) = facing_port(style, from, tx, ty);
-            let (x2, y2) = facing_port(style, to, fx, fy);
-            out.push_str(&format!(
-                r#"<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{stroke}" stroke-width="{width}"/>"#,
-                stroke = color.line,
-                width = style.edge_width,
+        ) else {
+            continue;
+        };
+        let fr = node_rect(style, from);
+        let tr = node_rect(style, to);
+        let src = facing_port(fr, rect_center(tr));
+        let dst = ranked_ports(tr, rect_center(fr))
+            .into_iter()
+            .find(|p| !taken.contains(&(to.id.clone(), p.side)))
+            .unwrap_or_else(|| facing_port(tr, rect_center(fr)));
+        taken.insert((to.id.clone(), dst.side));
+        let pts = route(src, dst);
+        let d: Vec<String> = pts
+            .iter()
+            .enumerate()
+            .map(|(i, (x, y))| format!("{}{x} {y}", if i == 0 { "M" } else { "L" }))
+            .collect();
+        out.push_str(&format!(
+            r#"<path d="{}" fill="none" stroke="{}" stroke-width="{}" stroke-linejoin="round"/>"#,
+            d.join(" "),
+            color.line,
+            style.edge_width,
+        ));
+        out.push('\n');
+        out.push_str(&arrowhead(dst, color.line.as_str(), style.edge_head));
+        out.push('\n');
+        if let Some(label) = &edge.label {
+            let (a, b) = longest_segment(&pts);
+            let (lx, ly) = ((a.0 + b.0) / 2, (a.1 + b.1) / 2);
+            let text_w = (label.chars().count() as i64 * style.edge_label_size * 600 / 1000) + style.text_pad_x;
+            let text_h = style.edge_label_size + 2;
+            let (bx, by) = if a.1 == b.1 {
+                (lx - text_w / 2, ly - text_h / 2)
+            } else {
+                (lx + style.edge_label_lift, ly - text_h / 2)
+            };
+            labels.push_str(&format!(
+                r#"<rect x="{bx}" y="{by}" width="{text_w}" height="{text_h}" fill="{}"/>"#,
+                color.canvas
             ));
-            out.push('\n');
-            if let Some(label) = &edge.label {
-                let lx = format_half(x1 + x2);
-                let ly = format_half(y1 + y2 - style.edge_label_lift * 2);
-                out.push_str(&format!(
-                    r#"<text x="{lx}" y="{ly}" text-anchor="middle" font-family="{font}" font-size="{size}" fill="{fill}">{}</text>"#,
-                    escape_xml(label),
-                    font = style.font_family,
-                    size = style.edge_label_size,
-                    fill = color.phosphor_dim,
-                ));
-                out.push('\n');
-            }
+            labels.push_str(&format!(
+                r#"<text x="{}" y="{}" text-anchor="middle" dominant-baseline="middle" font-family="{}" font-size="{}" fill="{}">{}</text>"#,
+                bx + text_w / 2,
+                by + text_h / 2,
+                style.font_family,
+                style.edge_label_size,
+                color.phosphor_dim,
+                escape_xml(label),
+            ));
+            labels.push('\n');
         }
     }
+    out.push_str(&labels);
 
+    // Nodes: outlined box, label on the top edge, description inside in the dim color.
+    // The type is not drawn; a decision rounds its corners more.
     for node in nodes {
         let (x, y, w, h) = node_rect(style, node);
         let (stroke, label_fill, meta_fill) = node_colors(style);
+        let rx = if node.node_type == NodeType::Decision { style.radius * 2 } else { style.radius };
         out.push_str(&format!(
             r#"<g id="node-{}" aria-label="{}">"#,
             escape_xml(&node.id),
@@ -117,50 +153,51 @@ fn build_svg(manifest: &ManifestDocument) -> String {
         ));
         out.push('\n');
         out.push_str(&format!(
-            r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{fill}" stroke="{stroke}" stroke-width="{border}"/>"#,
-            rx = style.radius,
-            fill = color.node_fill,
-            border = style.node_border,
+            r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{}" stroke="{stroke}" stroke-width="{}"/>"#,
+            color.node_fill,
+            style.node_border,
         ));
         out.push('\n');
-        // The type is not drawn; a description, when present, takes the meta line.
         let inner = (w - style.text_pad_x * 2).max(1);
-        let label_lines = wrap_mono(&node.label, style.label_size, inner);
-        let meta = node.description.as_deref().map(|d| wrap_mono(d, style.meta_size, inner));
-        let meta_height = meta
-            .as_ref()
-            .map_or(0, |lines| style.text_gap + (lines.len() as i64) * style.meta_size);
-        let block = (label_lines.len() as i64) * style.label_size + meta_height;
+        let label = fit_mono(&node.label, style.label_size, inner);
+        let label_w = label.chars().count() as i64 * style.label_size * 600 / 1000 + 6;
         let text_x = x + style.text_pad_x;
-        let mut text_y = y + (h - block) / 2;
+        // Knock the border out behind the label so it reads as sitting on the edge.
         out.push_str(&format!(
-            r#"<text x="{text_x}" y="{text_y}" fill="{label_fill}" font-family="{font}" font-size="{size}" font-weight="{weight}" dominant-baseline="hanging">"#,
-            font = style.font_family,
-            size = style.label_size,
-            weight = style.label_weight,
+            r#"<rect x="{}" y="{}" width="{label_w}" height="{}" fill="{}"/>"#,
+            text_x - 3,
+            y - style.label_size / 2 - 1,
+            style.label_size + 2,
+            color.node_fill,
         ));
-        for (index, line) in label_lines.iter().enumerate() {
-            let dy = if index == 0 { 0 } else { style.label_size };
+        out.push_str(&format!(
+            r#"<text x="{text_x}" y="{y}" fill="{label_fill}" font-family="{}" font-size="{}" font-weight="{}" dominant-baseline="middle">{}</text>"#,
+            style.font_family,
+            style.label_size,
+            style.label_weight,
+            escape_xml(&label),
+        ));
+        out.push('\n');
+        if let Some(desc) = node.description.as_deref().filter(|d| !d.is_empty()) {
+            let max_lines = ((h - style.label_size) / (style.meta_size + style.text_gap)).max(1) as usize;
+            let mut lines = wrap_mono(desc, style.meta_size, inner);
+            if lines.len() > max_lines {
+                lines.truncate(max_lines);
+                if let Some(last) = lines.last_mut() {
+                    *last = fit_mono(&format!("{last}…"), style.meta_size, inner);
+                }
+            }
+            let block = (lines.len() as i64) * (style.meta_size + style.text_gap) - style.text_gap;
+            let top = y + style.label_size / 2 + ((h - style.label_size / 2) - block) / 2;
             out.push_str(&format!(
-                r#"<tspan x="{text_x}" dy="{dy}">{}</tspan>"#,
-                escape_xml(line)
+                r#"<text x="{text_x}" y="{top}" fill="{meta_fill}" font-family="{}" font-size="{}" font-weight="{}" dominant-baseline="hanging">"#,
+                style.font_family,
+                style.meta_size,
+                style.meta_weight,
             ));
-        }
-        out.push_str("</text>\n");
-        if let Some(meta_lines) = meta {
-            text_y += (label_lines.len() as i64) * style.label_size + style.text_gap;
-            out.push_str(&format!(
-                r#"<text x="{text_x}" y="{text_y}" fill="{meta_fill}" font-family="{font}" font-size="{size}" font-weight="{weight}" dominant-baseline="hanging">"#,
-                font = style.font_family,
-                size = style.meta_size,
-                weight = style.meta_weight,
-            ));
-            for (index, line) in meta_lines.iter().enumerate() {
-                let dy = if index == 0 { 0 } else { style.meta_size };
-                out.push_str(&format!(
-                    r#"<tspan x="{text_x}" dy="{dy}">{}</tspan>"#,
-                    escape_xml(line)
-                ));
+            for (index, line) in lines.iter().enumerate() {
+                let dy = if index == 0 { 0 } else { style.meta_size + style.text_gap };
+                out.push_str(&format!(r#"<tspan x="{text_x}" dy="{dy}">{}</tspan>"#, escape_xml(line)));
             }
             out.push_str("</text>\n");
         }
@@ -193,57 +230,124 @@ fn canvas_size(style: &DiagramStyle, nodes: &[&Node]) -> (i64, i64) {
     (min_w.max(content_w), min_h.max(content_h))
 }
 
-fn node_rect(style: &DiagramStyle, node: &Node) -> (i64, i64, i64, i64) {
+type PxRect = (i64, i64, i64, i64);
+
+fn node_rect(style: &DiagramStyle, node: &Node) -> PxRect {
     let (w, h) = node_box(style, node.size);
     let x = style.pad + node.grid_position.x * style.cell;
     let y = style.pad + node.grid_position.y * style.cell;
     (x, y, w, h)
 }
 
-fn node_center(style: &DiagramStyle, node: &Node) -> (i64, i64) {
-    let (x, y, w, h) = node_rect(style, node);
+fn rect_center((x, y, w, h): PxRect) -> (i64, i64) {
     (x + w / 2, y + h / 2)
 }
 
-fn facing_port(style: &DiagramStyle, node: &Node, toward_x: i64, toward_y: i64) -> (i64, i64) {
-    let (x, y, w, h) = node_rect(style, node);
-    let ports = [
-        (x, y + h / 2),
-        (x + w, y + h / 2),
-        (x + w / 2, y),
-        (x + w / 2, y + h),
-    ];
-    ports
-        .into_iter()
-        .min_by_key(|(px, py)| {
-            let dx = px - toward_x;
-            let dy = py - toward_y;
-            dx * dx + dy * dy
-        })
-        .unwrap_or((x + w / 2, y + h / 2))
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Side {
+    Left,
+    Right,
+    Top,
+    Bottom,
 }
 
-/// Every Node type shares one color; the type is read from the meta line.
+#[derive(Clone, Copy)]
+struct Port {
+    x: i64,
+    y: i64,
+    side: Side,
+}
+
+/// The four side-midpoint ports ordered by how squarely each faces a point,
+/// measured in half-box units so a wide box still prefers top or bottom when
+/// the target is above or below.
+fn ranked_ports((x, y, w, h): PxRect, (tx, ty): (i64, i64)) -> [Port; 4] {
+    let (cx, cy) = (x + w / 2, y + h / 2);
+    let dx = (tx - cx) as f64 / (w as f64 / 2.0).max(1.0);
+    let dy = (ty - cy) as f64 / (h as f64 / 2.0).max(1.0);
+    let mut ports = [
+        (dx, Port { x: x + w, y: cy, side: Side::Right }),
+        (-dx, Port { x, y: cy, side: Side::Left }),
+        (dy, Port { x: cx, y: y + h, side: Side::Bottom }),
+        (-dy, Port { x: cx, y, side: Side::Top }),
+    ];
+    // Stable sort keeps the Right/Left-before-Bottom/Top tie-break of the facing rule.
+    ports.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    [ports[0].1, ports[1].1, ports[2].1, ports[3].1]
+}
+
+/// The port that faces a point best.
+fn facing_port(rect: PxRect, toward: (i64, i64)) -> Port {
+    ranked_ports(rect, toward)[0]
+}
+
+/// Orthogonal polyline from port to port, mirroring the terminal Editor's routing.
+fn route(from: Port, to: Port) -> Vec<(i64, i64)> {
+    let horizontal = |s: Side| matches!(s, Side::Left | Side::Right);
+    let mut pts = vec![(from.x, from.y)];
+    match (horizontal(from.side), horizontal(to.side)) {
+        (true, true) => {
+            if from.y != to.y {
+                let mid = (from.x + to.x) / 2;
+                pts.push((mid, from.y));
+                pts.push((mid, to.y));
+            }
+        }
+        (false, false) => {
+            if from.x != to.x {
+                let mid = (from.y + to.y) / 2;
+                pts.push((from.x, mid));
+                pts.push((to.x, mid));
+            }
+        }
+        (true, false) => pts.push((to.x, from.y)),
+        (false, true) => pts.push((from.x, to.y)),
+    }
+    pts.push((to.x, to.y));
+    pts.dedup();
+    pts
+}
+
+fn longest_segment(pts: &[(i64, i64)]) -> ((i64, i64), (i64, i64)) {
+    pts.windows(2)
+        .map(|p| (p[0], p[1]))
+        .max_by_key(|(a, b)| (b.0 - a.0).abs() + (b.1 - a.1).abs())
+        .unwrap_or((pts[0], pts[0]))
+}
+
+/// Filled triangle pointing into the Node at the target port.
+fn arrowhead(port: Port, fill: &str, size: i64) -> String {
+    let (x, y, s) = (port.x, port.y, size);
+    let half = s / 2;
+    let points = match port.side {
+        Side::Left => format!("{x},{y} {},{} {},{}", x - s, y - half, x - s, y + half),
+        Side::Right => format!("{x},{y} {},{} {},{}", x + s, y - half, x + s, y + half),
+        Side::Top => format!("{x},{y} {},{} {},{}", x - half, y - s, x + half, y - s),
+        Side::Bottom => format!("{x},{y} {},{} {},{}", x - half, y + s, x + half, y + s),
+    };
+    format!(r#"<polygon points="{points}" fill="{fill}"/>"#)
+}
+
 fn node_colors(style: &DiagramStyle) -> (&str, &str, &str) {
     let color = &style.color;
     (&color.phosphor, &color.phosphor, &color.phosphor_dim)
 }
 
+/// Characters of monospace text that fit in `inner_width` at `font_size`.
+/// IBM Plex Mono advances 600/1000 em per glyph.
+fn max_chars(font_size: i64, inner_width: i64) -> usize {
+    ((inner_width * 1000) / (font_size * 600).max(1)).max(1) as usize
+}
 
-
-fn format_half(sum: i64) -> String {
-    let negative = sum < 0;
-    let abs = sum.abs();
-    let body = if abs % 2 == 0 {
-        (abs / 2).to_string()
-    } else {
-        format!("{}.5", abs / 2)
-    };
-    if negative {
-        format!("-{body}")
-    } else {
-        body
+/// Truncate with an ellipsis to the box width.
+fn fit_mono(text: &str, font_size: i64, inner_width: i64) -> String {
+    let max = max_chars(font_size, inner_width);
+    if text.chars().count() <= max {
+        return text.to_owned();
     }
+    let mut out: String = text.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
 }
 
 fn font_faces() -> &'static str {
@@ -286,10 +390,9 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
-/// Wrap a monospace label to the node interior. Advance is 0.62em.
+/// Wrap monospace text to the node interior.
 fn wrap_mono(text: &str, font_size: i64, inner_width: i64) -> Vec<String> {
-    let advance = (font_size * 62 / 100).max(1);
-    let max_chars = (inner_width / advance).max(1) as usize;
+    let max_chars = max_chars(font_size, inner_width);
     let mut lines = Vec::new();
     let mut current = String::new();
     for word in text.split_whitespace() {
@@ -384,9 +487,11 @@ mod tests {
         assert!(svg.contains(&style.color.node_fill));
         assert!(svg.contains(&format!("rx=\"{}\"", style.radius)));
         assert!(svg.contains(&style.font_family));
-        assert!(svg.contains("kicks things off"), "description takes the meta line");
+        assert!(svg.contains("kicks things off"), "description sits inside the box");
         assert!(!svg.contains("process · medium") && !svg.contains("decision · small"), "the type is not drawn");
-        assert!(svg.contains(r#"x1="156" y1="54" x2="140" y2="50""#));
+        // start (medium at 0,0) → decide (small at 2,0): right port to left port with one jog.
+        assert!(svg.contains(r#"<path d="M156 54 L148 54 L148 50 L140 50""#), "{svg}");
+        assert!(svg.contains("<polygon points=\"140,50 "), "arrowhead at the target port");
         assert!(svg.contains(r#"width="896" height="560""#));
     }
 }

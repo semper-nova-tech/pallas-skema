@@ -66,7 +66,8 @@ Rules the validator enforces. Design to them instead of discovering them by fail
 5. Report the Nodes and Edges you changed, the Validation outcome, and both
    file paths.
 
-`skema validate --manifest <path>.json` checks without writing anything.
+`skema validate --manifest <path>.json` checks without writing anything. Add
+`--png <path>.png` to `render` when the user wants a picture to paste or attach.
 
 ## Open the Editor pane
 

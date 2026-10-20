@@ -16,6 +16,7 @@ export interface SkemaStyle {
   radius: number;
   nodeBorder: number;
   edgeWidth: string;
+  edgeHead: number;
   dotRadius: string;
   dotOffset: number;
   labelSize: number;

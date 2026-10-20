@@ -9,6 +9,7 @@
   "radius": 8,
   "nodeBorder": 1,
   "edgeWidth": "1.5",
+  "edgeHead": 8,
   "dotRadius": "2",
   "dotOffset": 8,
   "labelSize": 13,

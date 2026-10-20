@@ -3,28 +3,33 @@
 <rect width="896" height="560" fill="#071007"/>
 <rect width="896" height="560" fill="url(#skema-dots)"/>
 <rect x="0.5" y="0.5" width="895" height="559" fill="none" stroke="#365036" stroke-width="1"/>
-<line x1="212" y1="54" x2="252" y2="50" stroke="#85b286" stroke-width="1.5"/>
-<line x1="356" y1="50" x2="420" y2="54" stroke="#85b286" stroke-width="1.5"/>
-<text x="388" y="46" text-anchor="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">yes</text>
-<line x1="304" y1="72" x2="330" y2="364" stroke="#85b286" stroke-width="1.5"/>
-<text x="317" y="212" text-anchor="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">no</text>
-<line x1="252" y1="394" x2="212" y2="54" stroke="#85b286" stroke-width="1.5"/>
-<line x1="484" y1="80" x2="330" y2="364" stroke="#85b286" stroke-width="1.5"/>
+<path d="M212 54 L232 54 L232 50 L252 50" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="252,50 244,46 244,54" fill="#85b286"/>
+<path d="M356 50 L388 50 L388 54 L420 54" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="420,54 412,50 412,58" fill="#85b286"/>
+<path d="M304 72 L304 218 L330 218 L330 364" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="330,364 326,356 334,356" fill="#85b286"/>
+<path d="M330 364 L330 222 L148 222 L148 80" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="148,80 144,88 152,88" fill="#85b286"/>
+<path d="M484 80 L484 394 L408 394" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="408,394 416,390 416,398" fill="#85b286"/>
+<rect x="390" y="48" width="28" height="13" fill="#071007"/><text x="404" y="54" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">yes</text>
+<rect x="336" y="285" width="22" height="13" fill="#071007"/><text x="347" y="291" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">no</text>
 <g id="node-intake" aria-label="Recieve Rec">
 <rect x="84" y="28" width="128" height="52" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
-<text x="93" y="47" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="hanging"><tspan x="93" dy="0">Recieve Rec</tspan></text>
+<rect x="90" y="21" width="91" height="15" fill="#0d1a0d"/><text x="93" y="28" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">Recieve Rec</text>
 </g>
 <g id="node-review" aria-label="Fixed">
-<rect x="252" y="28" width="104" height="44" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
-<text x="261" y="43" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="hanging"><tspan x="261" dy="0">Fixed</tspan></text>
+<rect x="252" y="28" width="104" height="44" rx="16" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
+<rect x="258" y="21" width="45" height="15" fill="#0d1a0d"/><text x="261" y="28" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">Fixed</text>
 </g>
 <g id="node-done" aria-label="Ship it">
 <rect x="420" y="28" width="128" height="52" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
-<text x="429" y="47" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="hanging"><tspan x="429" dy="0">Ship it</tspan></text>
+<rect x="426" y="21" width="60" height="15" fill="#0d1a0d"/><text x="429" y="28" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">Ship it</text>
 </g>
 <g id="node-revise" aria-label="reject">
 <rect x="252" y="364" width="156" height="60" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
-<text x="261" y="375" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="hanging"><tspan x="261" dy="0">reject</tspan></text>
-<text x="261" y="390" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="261" dy="0">Send back to drawing</tspan><tspan x="261" dy="11">board.</tspan></text>
+<rect x="258" y="357" width="52" height="15" fill="#0d1a0d"/><text x="261" y="364" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">reject</text>
+<text x="261" y="385" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="261" dy="0">Send back to drawing</tspan><tspan x="261" dy="13">board.</tspan></text>
 </g>
 </svg>

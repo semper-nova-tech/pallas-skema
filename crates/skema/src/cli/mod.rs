@@ -38,6 +38,13 @@ pub fn run_render(manifest_path: &Path, svg_path: &Path) -> Result<(), TextFailu
     render_manifest(&manifest, svg_path).map(|_| ())
 }
 
+/// Write a PNG of the Manifest; Validation runs first (wire: runRenderPng).
+pub fn run_render_png(manifest_path: &Path, png_path: &Path) -> Result<(), TextFailure> {
+    let json = read_manifest_text(manifest_path)?;
+    let manifest = parse_manifest(&json)?;
+    skema_core::render_png(&manifest, png_path)
+}
+
 /// Build the Editor handoff for the launch paths. A missing Manifest yields a valid empty one.
 pub fn handoff_for(manifest_path: &Path, svg_path: &Path) -> Result<EditorJsonHandoff, TextFailure> {
     let manifest_json = if manifest_path.exists() {

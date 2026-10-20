@@ -6,7 +6,7 @@ use ratatui::style::Color;
 use skema_core::style::{diagram_style, DiagramStyle};
 use skema_core::{ManifestDocument, Node, NodeSize, NodeType};
 
-use crate::geometry::{facing_port, route, Port, Rect, Side, Zoom};
+use crate::geometry::{facing_port, ranked_ports, route, Port, Rect, Side, Zoom};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
@@ -178,9 +178,10 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
     // Plain Edges first, then the highlighted ones on top.
     let mut order: Vec<usize> = (0..doc.edges.len()).collect();
     order.sort_by_key(|i| Some(*i) == hover_edge || Some(*i) == selected_edge);
+    let ports = all_edge_ports(doc, zoom);
     for i in order {
         let edge = &doc.edges[i];
-        let Some((src, dst)) = edge_ports(doc, zoom, edge) else { continue };
+        let Some((src, dst)) = ports[i] else { continue };
         let heavy = Some(i) == hover_edge || Some(i) == selected_edge;
         let color = if Some(i) == selected_edge { pal.phosphor } else { pal.line };
         overlays.extend(draw_edge_lines(&mut s, src, dst, edge.label.as_deref(), color, heavy));
@@ -236,22 +237,41 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
     s
 }
 
-/// Source and target ports of an Edge, or None when an endpoint is missing.
+/// Ports for every Edge, in Manifest order. A target side already used by an
+/// earlier Edge yields to the next-best side, so arrowheads do not pile up.
+/// Same rule as the SVG renderer.
+pub fn all_edge_ports(doc: &ManifestDocument, zoom: &Zoom) -> Vec<Option<(Port, Port)>> {
+    let mut taken: std::collections::HashSet<(usize, Side)> = std::collections::HashSet::new();
+    doc.edges
+        .iter()
+        .map(|edge| {
+            let from = doc.nodes.iter().find(|n| n.id == edge.from)?;
+            let (ti, to) = doc.nodes.iter().enumerate().find(|(_, n)| n.id == edge.to)?;
+            let fr = zoom.node_rect(from);
+            let tr = zoom.node_rect(to);
+            let (tc, trow) = tr.center();
+            let (fc, frow) = fr.center();
+            let src = facing_port(&fr, tc, trow);
+            let ranked = ranked_ports(&tr, fc, frow);
+            let dst = ranked.into_iter().find(|p| !taken.contains(&(ti, p.side))).unwrap_or(ranked[0]);
+            taken.insert((ti, dst.side));
+            Some((src, dst))
+        })
+        .collect()
+}
+
+/// Source and target ports of one Edge, or None when an endpoint is missing.
 pub fn edge_ports(doc: &ManifestDocument, zoom: &Zoom, edge: &skema_core::Edge) -> Option<(Port, Port)> {
-    let from = doc.nodes.iter().find(|n| n.id == edge.from)?;
-    let to = doc.nodes.iter().find(|n| n.id == edge.to)?;
-    let fr = zoom.node_rect(from);
-    let tr = zoom.node_rect(to);
-    let (tc, trow) = tr.center();
-    let (fc, frow) = fr.center();
-    Some((facing_port(&fr, tc, trow), facing_port(&tr, fc, frow)))
+    let index = doc.edges.iter().position(|e| e == edge)?;
+    all_edge_ports(doc, zoom).into_iter().nth(index).flatten()
 }
 
 /// The Edge whose line passes through a surface cell, if any. Nodes win over Edges,
 /// so callers check for a Node first.
 pub fn edge_at(doc: &ManifestDocument, zoom: &Zoom, col: i64, row: i64) -> Option<usize> {
-    doc.edges.iter().enumerate().rev().find_map(|(i, edge)| {
-        let (src, dst) = edge_ports(doc, zoom, edge)?;
+    let ports = all_edge_ports(doc, zoom);
+    (0..doc.edges.len()).rev().find_map(|i| {
+        let (src, dst) = ports[i]?;
         let pts = route(src, dst);
         let on_line = pts.windows(2).any(|pair| {
             let (a, b) = (pair[0], pair[1]);
@@ -443,6 +463,30 @@ fn draw_ghost(s: &mut Surface, zoom: &Zoom, g: Ghost, pal: &Palette) {
     }
 }
 
+/// Whether drawing this Node at this zoom cuts its label or description short,
+/// which is when a hover tooltip earns its place.
+pub fn node_overflows(zoom: &Zoom, node: &Node) -> bool {
+    let r = zoom.node_rect(node);
+    let label_len = node.label.chars().count();
+    if r.h == 1 {
+        return label_len > (r.w - 2).max(1) as usize || node.description.as_deref().is_some_and(|d| !d.is_empty());
+    }
+    let inner = (r.w - 4).max(1) as usize;
+    if label_len > inner {
+        return true;
+    }
+    match node.description.as_deref().filter(|d| !d.is_empty()) {
+        None => false,
+        Some(d) => {
+            let rows = (r.h - 2).max(1) as usize;
+            let shown: usize = wrap(d, inner, rows).iter().map(|l| l.chars().count()).sum();
+            // wrap() drops spaces between lines and may end with an ellipsis.
+            shown < d.split_whitespace().map(|w| w.chars().count()).sum::<usize>()
+                || wrap(d, inner, rows).last().is_some_and(|l| l.ends_with('…'))
+        }
+    }
+}
+
 /// Truncate with an ellipsis to `width` characters.
 pub fn fit(text: &str, width: usize) -> String {
     let count = text.chars().count();
@@ -554,6 +598,23 @@ mod tests {
     }
 
     #[test]
+    fn a_second_edge_into_a_node_takes_the_next_best_side() {
+        let doc = parse_manifest(include_str!("../../../examples/flow.json")).unwrap();
+        let ports = all_edge_ports(&doc, &Z);
+        let into_revise: Vec<Side> = doc
+            .edges
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.to == "revise")
+            .map(|(i, _)| ports[i].unwrap().1.side)
+            .collect();
+        assert!(into_revise.len() >= 2, "{into_revise:?}");
+        let mut unique = into_revise.clone();
+        unique.dedup();
+        assert_eq!(unique.len(), into_revise.len(), "each Edge into revise has its own side: {into_revise:?}");
+    }
+
+    #[test]
     fn a_port_shared_by_two_edges_keeps_its_arrowhead() {
         let doc = parse_manifest(include_str!("../../../examples/flow.json")).unwrap();
         let s = draw(&doc, &Z, None, None, None);
@@ -658,6 +719,30 @@ mod tests {
         let mid = ((src.col + dst.col) / 2, src.row);
         assert_eq!(edge_at(&doc, &Z, mid.0, mid.1), Some(0));
         assert_eq!(edge_at(&doc, &Z, mid.0, mid.1 + 1), None);
+    }
+
+    #[test]
+    fn node_overflow_detects_cut_labels_and_descriptions() {
+        let mk = |label: &str, desc: Option<&str>, size: &str| {
+            parse_manifest(&format!(
+                r#"{{"nodes":[{{"id":"n","label":"{label}","type":"process","size":"{size}","gridPosition":{{"x":0,"y":0}}{}}}],"edges":[]}}"#,
+                desc.map(|d| format!(r#","description":"{d}""#)).unwrap_or_default()
+            ))
+            .unwrap()
+            .nodes
+            .remove(0)
+        };
+        assert!(!node_overflows(&Z, &mk("Ship it", None, "medium")));
+        assert!(node_overflows(&Z, &mk("Receive the request", None, "medium")));
+        // Default zoom has one interior row: a short description fits, a long one is cut.
+        assert!(!node_overflows(&Z, &mk("Ship it", Some("after review"), "medium")));
+        assert!(node_overflows(&Z, &mk("Ship it", Some("after review by the whole team"), "medium")));
+        // Large zoom has three rows: a short description fits, a long one does not.
+        assert!(!node_overflows(&ZOOMS[3], &mk("Ship it", Some("after review"), "medium")));
+        assert!(node_overflows(&ZOOMS[3], &mk("Ship it", Some("a much longer description that cannot possibly fit in three short rows of text"), "small")));
+        // Compact zoom: label must fit the brackets.
+        assert!(!node_overflows(&ZOOMS[0], &mk("Ship", None, "medium")));
+        assert!(node_overflows(&ZOOMS[0], &mk("Ship it now", None, "medium")));
     }
 
     #[test]
