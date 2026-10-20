@@ -31,9 +31,7 @@ export async function applyNodeGridMove(
   node.gridPosition = { x, y };
 
   const candidateJson = serializeManifest(next);
-  const tempPath = await transport.writeTempManifest(candidateJson);
-  const validation = await transport.validateManifestFile(tempPath);
-  await transport.removeTempFile(tempPath);
+  const validation = await transport.validateManifestJson(candidateJson);
 
   if (!validation.ok) {
     return refuseInvalidEdit(session, previousManifest, previousJson, validation.textFailure);
@@ -141,9 +139,7 @@ export async function applyConnectEdge(
   next.edges.push({ from: fromId, to: toId });
 
   const candidateJson = serializeManifest(next);
-  const tempPath = await transport.writeTempManifest(candidateJson);
-  const validation = await transport.validateManifestFile(tempPath);
-  await transport.removeTempFile(tempPath);
+  const validation = await transport.validateManifestJson(candidateJson);
 
   if (!validation.ok) {
     return refuseInvalidEdit(session, previousManifest, previousJson, validation.textFailure);
@@ -176,9 +172,7 @@ export async function applyNodeWithEdge(
   next.edges.push({ from: fromId, to: node.id });
 
   const candidateJson = serializeManifest(next);
-  const tempPath = await transport.writeTempManifest(candidateJson);
-  const validation = await transport.validateManifestFile(tempPath);
-  await transport.removeTempFile(tempPath);
+  const validation = await transport.validateManifestJson(candidateJson);
 
   if (!validation.ok) {
     return refuseInvalidEdit(session, previousManifest, previousJson, validation.textFailure);

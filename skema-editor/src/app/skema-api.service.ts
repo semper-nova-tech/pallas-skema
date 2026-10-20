@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { SkemaTransport } from '../editor/skema-transport';
+import type { SkemaOutcome, SkemaTransport } from '../editor/skema-transport';
 
 interface ApiResult {
   ok: boolean;
@@ -13,34 +13,15 @@ export class SkemaApiService implements SkemaTransport {
   private readonly http = inject(HttpClient);
   private readonly base = '/api/skema';
 
-  validateManifestFile(manifestPath: string): Promise<{ ok: true } | { ok: false; textFailure: string }> {
-    return this.post('validate', { manifestPath });
+  validateManifestJson(manifestJson: string): Promise<SkemaOutcome> {
+    return this.post('validate', { manifestJson });
   }
 
-  renderManifest(manifestPath: string, svgPath: string): Promise<{ ok: true } | { ok: false; textFailure: string }> {
-    return this.post('render', { manifestPath, svgPath });
+  saveManifest(manifestPath: string, svgPath: string, manifestJson: string): Promise<SkemaOutcome> {
+    return this.post('save', { manifestPath, svgPath, manifestJson });
   }
 
-  writeManifestFile(manifestPath: string, manifestJson: string): Promise<void> {
-    return firstValueFrom(
-      this.http.post<void>(`${this.base}/write-manifest`, { manifestPath, manifestJson }),
-    );
-  }
-
-  writeTempManifest(manifestJson: string): Promise<string> {
-    return firstValueFrom(
-      this.http.post<{ path: string }>(`${this.base}/temp-manifest`, { manifestJson }),
-    ).then((res) => res.path);
-  }
-
-  removeTempFile(path: string): Promise<void> {
-    return firstValueFrom(this.http.post<void>(`${this.base}/remove-temp`, { path }));
-  }
-
-  private async post(
-    action: string,
-    body: Record<string, string>,
-  ): Promise<{ ok: true } | { ok: false; textFailure: string }> {
+  private async post(action: string, body: Record<string, string>): Promise<SkemaOutcome> {
     const result = await firstValueFrom(this.http.post<ApiResult>(`${this.base}/${action}`, body));
     if (result.ok) {
       return { ok: true };

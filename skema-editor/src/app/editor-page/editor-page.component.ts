@@ -95,7 +95,7 @@ export class EditorPageComponent {
     try {
       const handoff = await firstValueFrom(this.http.get<EditorJsonHandoff>('/handoff.json'));
       if (!handoff) {
-        this.statusMessage.set('No handoff.json; run skema open-editor and copy handoff to public/handoff.json');
+        this.statusMessage.set('No handoff; start this page from skema open-editor');
         return;
       }
       const loaded = await loadManifest(handoff, this.transport);

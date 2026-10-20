@@ -288,15 +288,6 @@
   background: var(--phosphor);
 }
 
-.node[data-type='decision'] {
-  border-color: var(--amber);
-  color: var(--amber-text);
-}
-
-.node[data-type='note'] {
-  border-color: var(--phosphor-dim);
-}
-
 .node:hover {
   box-shadow: 0 0 0 1px color-mix(in oklch, var(--phosphor) 55%, transparent);
 }
@@ -316,10 +307,6 @@
   line-height: 1;
   font-weight: var(--meta-weight);
   color: var(--phosphor-dim);
-}
-
-.node[data-type='decision'] .node-meta {
-  color: var(--amber-dim);
 }
 
 .empty {

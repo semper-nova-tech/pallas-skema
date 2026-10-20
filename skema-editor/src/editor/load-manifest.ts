@@ -28,9 +28,7 @@ export async function loadManifest(
   }
 
   const manifest = parsed.manifest;
-  const tempPath = await transport.writeTempManifest(handoff.manifestJson);
-  const validation = await transport.validateManifestFile(tempPath);
-  await transport.removeTempFile(tempPath);
+  const validation = await transport.validateManifestJson(handoff.manifestJson);
 
   const diagramVisible = true;
   if (!validation.ok) {

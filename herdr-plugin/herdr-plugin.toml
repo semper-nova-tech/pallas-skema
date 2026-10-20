@@ -1,0 +1,22 @@
+id = "pallas.skema"
+name = "Skema Editor"
+version = "0.1.0"
+min_herdr_version = "0.8.2"
+description = "Pallas Skema terminal Editor: arrange a JSON Diagram on a Grid in a pane while an agent edits the same file"
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["sh", "scripts/install.sh"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "open"
+title = "Open Skema Editor"
+contexts = ["workspace"]
+command = ["sh", "scripts/open-editor.sh"]
+
+[[panes]]
+id = "editor"
+title = "Skema"
+placement = "split"
+command = ["sh", "scripts/open-editor.sh"]

@@ -1,0 +1,69 @@
+{
+  "nodes": [
+    {
+      "id": "intake",
+      "label": "Recieve Rec",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 1,
+        "y": 0
+      }
+    },
+    {
+      "id": "review",
+      "label": "Fixed",
+      "type": "decision",
+      "size": "small",
+      "gridPosition": {
+        "x": 4,
+        "y": 0
+      }
+    },
+    {
+      "id": "done",
+      "label": "Ship it",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 7,
+        "y": 0
+      }
+    },
+    {
+      "id": "revise",
+      "label": "reject",
+      "description": "Send back to drawing board.",
+      "type": "note",
+      "size": "large",
+      "gridPosition": {
+        "x": 4,
+        "y": 6
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "intake",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "done",
+      "label": "yes"
+    },
+    {
+      "from": "review",
+      "to": "revise",
+      "label": "no"
+    },
+    {
+      "from": "revise",
+      "to": "intake"
+    },
+    {
+      "from": "done",
+      "to": "revise"
+    }
+  ]
+}

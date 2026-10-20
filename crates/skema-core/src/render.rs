@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::manifest::{ManifestDocument, Node, NodeType};
+use crate::manifest::{ManifestDocument, Node};
 use crate::style::{diagram_style, node_box, DiagramStyle};
 use crate::svg::SvgOutput;
 use crate::validation::{validate_manifest, TextFailure};
@@ -109,7 +109,13 @@ fn build_svg(manifest: &ManifestDocument) -> String {
 
     for node in nodes {
         let (x, y, w, h) = node_rect(style, node);
-        let (stroke, label_fill, meta_fill) = node_colors(style, node.node_type);
+        let (stroke, label_fill, meta_fill) = node_colors(style);
+        out.push_str(&format!(
+            r#"<g id="node-{}" aria-label="{}">"#,
+            escape_xml(&node.id),
+            escape_xml(&node.label),
+        ));
+        out.push('\n');
         out.push_str(&format!(
             r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{fill}" stroke="{stroke}" stroke-width="{border}"/>"#,
             rx = style.radius,
@@ -117,15 +123,14 @@ fn build_svg(manifest: &ManifestDocument) -> String {
             border = style.node_border,
         ));
         out.push('\n');
-        let meta = format!(
-            "{} · {}",
-            node_type_name(node.node_type),
-            node_size_name(node.size)
-        );
+        // The type is not drawn; a description, when present, takes the meta line.
         let inner = (w - style.text_pad_x * 2).max(1);
         let label_lines = wrap_mono(&node.label, style.label_size, inner);
-        let block =
-            (label_lines.len() as i64) * style.label_size + style.text_gap + style.meta_size;
+        let meta = node.description.as_deref().map(|d| wrap_mono(d, style.meta_size, inner));
+        let meta_height = meta
+            .as_ref()
+            .map_or(0, |lines| style.text_gap + (lines.len() as i64) * style.meta_size);
+        let block = (label_lines.len() as i64) * style.label_size + meta_height;
         let text_x = x + style.text_pad_x;
         let mut text_y = y + (h - block) / 2;
         out.push_str(&format!(
@@ -142,15 +147,24 @@ fn build_svg(manifest: &ManifestDocument) -> String {
             ));
         }
         out.push_str("</text>\n");
-        text_y += (label_lines.len() as i64) * style.label_size + style.text_gap;
-        out.push_str(&format!(
-            r#"<text x="{text_x}" y="{text_y}" fill="{meta_fill}" font-family="{font}" font-size="{size}" font-weight="{weight}" dominant-baseline="hanging">{}</text>"#,
-            escape_xml(&meta),
-            font = style.font_family,
-            size = style.meta_size,
-            weight = style.meta_weight,
-        ));
-        out.push('\n');
+        if let Some(meta_lines) = meta {
+            text_y += (label_lines.len() as i64) * style.label_size + style.text_gap;
+            out.push_str(&format!(
+                r#"<text x="{text_x}" y="{text_y}" fill="{meta_fill}" font-family="{font}" font-size="{size}" font-weight="{weight}" dominant-baseline="hanging">"#,
+                font = style.font_family,
+                size = style.meta_size,
+                weight = style.meta_weight,
+            ));
+            for (index, line) in meta_lines.iter().enumerate() {
+                let dy = if index == 0 { 0 } else { style.meta_size };
+                out.push_str(&format!(
+                    r#"<tspan x="{text_x}" dy="{dy}">{}</tspan>"#,
+                    escape_xml(line)
+                ));
+            }
+            out.push_str("</text>\n");
+        }
+        out.push_str("</g>\n");
     }
 
     out.push_str("</svg>\n");
@@ -209,30 +223,13 @@ fn facing_port(style: &DiagramStyle, node: &Node, toward_x: i64, toward_y: i64) 
         .unwrap_or((x + w / 2, y + h / 2))
 }
 
-fn node_colors(style: &DiagramStyle, node_type: NodeType) -> (&str, &str, &str) {
+/// Every Node type shares one color; the type is read from the meta line.
+fn node_colors(style: &DiagramStyle) -> (&str, &str, &str) {
     let color = &style.color;
-    match node_type {
-        NodeType::Process => (&color.phosphor, &color.phosphor, &color.phosphor_dim),
-        NodeType::Decision => (&color.amber, &color.amber_text, &color.amber_dim),
-        NodeType::Note => (&color.phosphor_dim, &color.phosphor, &color.phosphor_dim),
-    }
+    (&color.phosphor, &color.phosphor, &color.phosphor_dim)
 }
 
-fn node_type_name(node_type: NodeType) -> &'static str {
-    match node_type {
-        NodeType::Process => "process",
-        NodeType::Decision => "decision",
-        NodeType::Note => "note",
-    }
-}
 
-fn node_size_name(size: crate::manifest::NodeSize) -> &'static str {
-    match size {
-        crate::manifest::NodeSize::Small => "small",
-        crate::manifest::NodeSize::Medium => "medium",
-        crate::manifest::NodeSize::Large => "large",
-    }
-}
 
 fn format_half(sum: i64) -> String {
     let negative = sum < 0;
@@ -356,6 +353,7 @@ mod tests {
                 Node {
                     id: "start".into(),
                     label: "Start process".into(),
+                    description: Some("kicks things off".into()),
                     node_type: NodeType::Process,
                     size: NodeSize::Medium,
                     grid_position: GridPosition { x: 0, y: 0 },
@@ -363,6 +361,7 @@ mod tests {
                 Node {
                     id: "decide".into(),
                     label: "Choose path".into(),
+                    description: None,
                     node_type: NodeType::Decision,
                     size: NodeSize::Small,
                     grid_position: GridPosition { x: 2, y: 0 },
@@ -382,12 +381,11 @@ mod tests {
         let style = diagram_style();
         assert!(svg.contains(&style.color.canvas));
         assert!(svg.contains(&style.color.phosphor));
-        assert!(svg.contains(&style.color.amber));
         assert!(svg.contains(&style.color.node_fill));
         assert!(svg.contains(&format!("rx=\"{}\"", style.radius)));
         assert!(svg.contains(&style.font_family));
-        assert!(svg.contains("process · medium"));
-        assert!(svg.contains("decision · small"));
+        assert!(svg.contains("kicks things off"), "description takes the meta line");
+        assert!(!svg.contains("process · medium") && !svg.contains("decision · small"), "the type is not drawn");
         assert!(svg.contains(r#"x1="156" y1="54" x2="140" y2="50""#));
         assert!(svg.contains(r#"width="896" height="560""#));
     }

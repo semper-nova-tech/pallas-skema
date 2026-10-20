@@ -29,5 +29,3 @@ rustc-ice-*.txt
 # Angular Editor
 skema-editor/node_modules/
 skema-editor/dist/
-.skema-editor-tmp/
-.skema-editor-int/

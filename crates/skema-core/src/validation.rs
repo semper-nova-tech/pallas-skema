@@ -113,6 +113,7 @@ mod tests {
         Node {
             id: id.into(),
             label: id.into(),
+            description: None,
             node_type: NodeType::Process,
             size: NodeSize::Medium,
             grid_position: GridPosition { x, y },

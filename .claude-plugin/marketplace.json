@@ -1,0 +1,24 @@
+{
+  "name": "pallas-skema",
+  "owner": {
+    "name": "John Marlett",
+    "url": "https://github.com/jmarlett93"
+  },
+  "description": "Agent and human friendly diagram protocol: JSON Manifest, deterministic SVG, terminal Editor.",
+  "plugins": [
+    {
+      "name": "pallas-skema",
+      "source": "./",
+      "description": "Skill for editing Skema Manifests, rendering SVG, and opening the Editor pane.",
+      "author": {
+        "name": "John Marlett",
+        "url": "https://github.com/jmarlett93"
+      },
+      "repository": "https://github.com/semper-nova-tech/pallas-skema",
+      "license": "MIT",
+      "category": "development",
+      "tags": ["diagram", "svg", "herdr"],
+      "version": "0.1.0"
+    }
+  ]
+}

@@ -8,7 +8,7 @@ Status: planned
 
 ## Manifest (model)
 
-- **Fields:** Top-level `nodes` and `edges` arrays. Each Node has stable `id`, `label`, `type`, `size`, and `gridPosition` with integer `x` and `y`. Each Edge has `from` and `to` Node ids and optional `label`.
+- **Fields:** Top-level `nodes` and `edges` arrays. Each Node has stable `id`, `label`, optional `description`, `type`, `size`, and `gridPosition` with integer `x` and `y`. Each Edge has `from` and `to` Node ids and optional `label`.
 - **Invariants:** JSON parses; Node ids unique; Edge endpoints reference existing Node ids; Node `type` ∈ {process, decision, note}; Node `size` ∈ {small, medium, large}; Grid coordinates are non-negative integers with no upper bound; at most one Node per Grid cell (overlap rejected).
 - **Implementation (PR-01):** `skema-core` crate modules `manifest` and `grid`; `parse_manifest` / `serialize_manifest` for JSON (`application/json`).
 
@@ -34,7 +34,7 @@ Status: planned
 - **Input:** Workspace paths for Manifest and SVG; subcommands validate, render, and open-editor
 - **Output:** Exit code zero on success; Text failure on stderr and non-zero exit on errors. open-editor stays running, owns the Editor window, and accepts close and save until the process exits.
 - **Invariants:** Render subcommand runs Validation first; Agent path uses the same library Validation and Render as the Editor save path
-- **Shipped today:** Binary `skema` in crate `skema` writes the JSON handoff (`manifestJson`, `manifestPath`, `svgPath`) and exits. Window ownership, close, and save are specified and not built.
+- **Shipped today:** Binary `skema` in crate `skema` validates, renders, and opens the Editor. `open-editor` runs the terminal Editor (crate `skema-tui`) in the current terminal, which may be a Herdr pane, until the Human reviewer quits. Every edit is validated in-process by `skema-core` before it applies; save validates, writes the Manifest, then renders. The Editor polls the Manifest and reloads when it changes on disk. `--handoff-out` writes the JSON handoff file instead of opening the Editor. A close request from outside the process is specified and not built.
 
 ## Editor launch (contract)
 
@@ -47,7 +47,7 @@ Status: planned
 - **Owner:** Frontend
 - **Input:** In-memory Diagram edits from `EditorJsonHandoff` (`manifestJson`, `manifestPath`, `svgPath`)
 - **Output:** Manifest file write only after Validation passes; Text failure on refusal or repair states; disk unchanged until a valid save
-- **Validation and Render transport (PT-002):** Angular Editor calls the `skema` binary (`validate`, `render`) via the local dev bridge (`skema-editor/server/skema-bridge.mjs`); no duplicate Validation rules in TypeScript
+- **Validation and Render transport (PT-002):** The terminal Editor links `skema-core` directly and calls `validate_manifest` and `render_manifest` in-process; no duplicate Validation rules anywhere else. The Angular editor under `skema-editor/` is legacy and unserved.
 - **After valid save:** Primary journey invokes shared Render so SVG reflects the saved Manifest; failed Validation writes no SVG and does not modify an existing SVG
 - **Implementation (PR-03):** Angular app `skema-editor`; glossary module `editor` exports `EditorSession`, `loadManifest`, `saveManifest`, `refuseInvalidEdit`, and `showTextFailure`
 

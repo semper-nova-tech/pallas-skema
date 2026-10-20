@@ -8,21 +8,16 @@ import type { SkemaTransport } from './skema-transport';
 function mockTransport(validateResults: Array<{ ok: boolean; textFailure?: string }>): SkemaTransport {
   let call = 0;
   return {
-    async validateManifestFile() {
+    async validateManifestJson() {
       const result = validateResults[call] ?? { ok: true };
       call += 1;
       return result.ok
         ? { ok: true }
         : { ok: false, textFailure: result.textFailure ?? 'validation failed' };
     },
-    async renderManifest() {
+    async saveManifest() {
       return { ok: true };
     },
-    async writeManifestFile() {},
-    async writeTempManifest(json: string) {
-      return `/tmp/mock-${json.length}.json`;
-    },
-    async removeTempFile() {},
   };
 }
 
@@ -109,19 +104,13 @@ describe('Editor session (STATE-editor-manifest-lifecycle)', () => {
     expect(session.manifest?.edges).toEqual([{ from: 'a', to: 'b' }]);
 
     const transport: SkemaTransport = {
-      async validateManifestFile() {
+      async validateManifestJson() {
         return { ok: true };
       },
-      async renderManifest() {
-        return { ok: true };
-      },
-      async writeManifestFile(_path, json) {
+      async saveManifest(_manifestPath, _svgPath, json) {
         written = json;
+        return { ok: true };
       },
-      async writeTempManifest(json) {
-        return `/tmp/t-${json.length}.json`;
-      },
-      async removeTempFile() {},
     };
     const saved = await saveManifest(session, transport);
     expect(saved.lifecycleState).toBe('ValidSaved');
@@ -129,56 +118,38 @@ describe('Editor session (STATE-editor-manifest-lifecycle)', () => {
     expect(written).toContain('"to": "b"');
   });
 
-  it('blocks save when Validation fails and does not render', async () => {
-    const writes: string[] = [];
-    const renders: string[] = [];
+  it('surfaces a blocked save as Text failure and keeps the prior state', async () => {
     const transport: SkemaTransport = {
-      async validateManifestFile() {
-        return { ok: false, textFailure: 'blocked' };
-      },
-      async renderManifest(manifestPath, svgPath) {
-        renders.push(`${manifestPath}:${svgPath}`);
+      async validateManifestJson() {
         return { ok: true };
       },
-      async writeManifestFile(_path, json) {
-        writes.push(json);
+      async saveManifest() {
+        return { ok: false, textFailure: 'blocked' };
       },
-      async writeTempManifest(json) {
-        return `/tmp/t-${json.length}.json`;
-      },
-      async removeTempFile() {},
     };
     const session = createEmptySession({ manifestPath: '/w/m.json', svgPath: '/w/m.svg' });
     const result = await saveManifest(session, transport);
     expect(result.textFailure).toBe('blocked');
-    expect(writes.length).toBe(0);
-    expect(renders.length).toBe(0);
+    expect(result.lifecycleState).toBe('ValidEmpty');
   });
 
-  it('save triggers render after Validation passes (BEHAVIOR-editor-save-render)', async () => {
-    let rendered = false;
-    let written = false;
+  it('save passes the launch paths and serialized Manifest (BEHAVIOR-editor-save-render)', async () => {
+    const saves: Array<{ manifestPath: string; svgPath: string; json: string }> = [];
     const transport: SkemaTransport = {
-      async validateManifestFile() {
+      async validateManifestJson() {
         return { ok: true };
       },
-      async renderManifest() {
-        rendered = true;
+      async saveManifest(manifestPath, svgPath, json) {
+        saves.push({ manifestPath, svgPath, json });
         return { ok: true };
       },
-      async writeManifestFile() {
-        written = true;
-      },
-      async writeTempManifest(json) {
-        return `/tmp/t-${json.length}.json`;
-      },
-      async removeTempFile() {},
     };
     const session = createEmptySession({ manifestPath: '/w/m.json', svgPath: '/w/m.svg' });
     const result = await saveManifest(session, transport);
     expect(result.lifecycleState).toBe('ValidSaved');
-    expect(written).toBeTrue();
-    expect(rendered).toBeTrue();
+    expect(saves).toEqual([
+      { manifestPath: '/w/m.json', svgPath: '/w/m.svg', json: '{\n  "nodes": [],\n  "edges": []\n}\n' },
+    ]);
   });
 
   it('exports glossary helpers showTextFailure and refuseInvalidEdit', () => {

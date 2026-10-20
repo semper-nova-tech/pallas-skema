@@ -58,9 +58,6 @@ pub struct StyleColor {
     pub phosphor: String,
     pub phosphor_dim: String,
     pub dot: String,
-    pub amber: String,
-    pub amber_text: String,
-    pub amber_dim: String,
     pub line: String,
     pub frame: String,
 }

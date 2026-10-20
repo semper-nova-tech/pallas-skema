@@ -3,7 +3,7 @@
 pub mod grid;
 pub mod manifest;
 pub mod render;
-mod style;
+pub mod style;
 pub mod svg;
 pub mod validation;
 
