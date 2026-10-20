@@ -80,6 +80,16 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                     }
                 }
                 MouseEventKind::Down(MouseButton::Left) => {
+                    // A click back into the graph closes an open editor box, saving a
+                    // value that was being typed, then counts as an ordinary click.
+                    if matches!(app.mode, Mode::EditNode { .. } | Mode::EditEdge { .. })
+                        && in_rect(view.area, mouse.column, mouse.row)
+                    {
+                        if matches!(app.mode, Mode::EditNode { editing: Some(_), .. } | Mode::EditEdge { editing: Some(_) }) {
+                            app.activate();
+                        }
+                        app.mode = Mode::Normal;
+                    }
                     let zoom = &ZOOMS[app.zoom];
                     let hit = surface_point(&view, mouse.column, mouse.row)
                         .and_then(|(c, r)| app.node_at_point(zoom, c, r));
@@ -248,6 +258,13 @@ fn handle_key(app: &mut App, code: KeyCode, mods: KeyModifiers) {
             KeyCode::Enter => app.activate(),
             KeyCode::Esc => app.cancel(),
             KeyCode::Backspace => app.edit_pop(),
+            KeyCode::Delete => app.edit_delete(),
+            KeyCode::Left => app.edit_cursor(-1),
+            KeyCode::Right => app.edit_cursor(1),
+            KeyCode::Home => app.edit_cursor(i64::MIN),
+            KeyCode::End => app.edit_cursor(i64::MAX),
+            KeyCode::Char('a') if mods.contains(KeyModifiers::CONTROL) => app.edit_cursor(i64::MIN),
+            KeyCode::Char('e') if mods.contains(KeyModifiers::CONTROL) => app.edit_cursor(i64::MAX),
             KeyCode::Char(c) if !mods.contains(KeyModifiers::CONTROL) => app.edit_push(c),
             _ => {}
         }

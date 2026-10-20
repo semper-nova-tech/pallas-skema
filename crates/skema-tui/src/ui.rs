@@ -14,6 +14,10 @@ use crate::geometry::{fit_zoom, ZOOMS};
 use skema_core::style::diagram_style;
 
 pub const PANEL_W: u16 = 24;
+/// The panel widens while an editor box is open so labels and descriptions have room.
+pub const PANEL_EDIT_W: u16 = 40;
+/// Field values wrap to this many lines inside the editor box.
+const FIELD_LINES: usize = 3;
 
 /// Where the canvas viewport was drawn last frame, for mouse hit-testing.
 #[derive(Debug, Clone, Copy, Default)]
@@ -39,9 +43,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Hits {
 
     let [header, body, footer] =
         Layout::vertical([Constraint::Length(1), Constraint::Min(3), Constraint::Length(2)]).areas(area);
-    // Tool panel on the left, canvas on the right.
+    // Tool panel on the left, canvas on the right. The panel grows while editing.
+    let editing = matches!(app.mode, Mode::EditNode { .. } | Mode::EditEdge { .. });
+    let panel_w = if editing { PANEL_EDIT_W.min(body.width / 2) } else { PANEL_W };
     let [panel_area, canvas_area] =
-        Layout::horizontal([Constraint::Length(PANEL_W), Constraint::Min(20)]).areas(body);
+        Layout::horizontal([Constraint::Length(panel_w), Constraint::Min(20)]).areas(body);
 
     draw_header(frame, header, app, &pal);
     let canvas = draw_canvas(frame, canvas_area, app, &pal);
@@ -57,22 +63,23 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) {
         Span::styled(if app.dirty { " ●" } else { "" }, Style::default().fg(pal.phosphor)),
     ]);
     frame.render_widget(Paragraph::new(title), area);
-    let zoom_tag = if app.zoom == app.fit_zoom { "fit" } else { "" };
-    let state = Line::from(vec![
-        Span::styled(
-            format!("zoom {}/{} {zoom_tag}  ", app.zoom + 1, ZOOMS.len()),
-            Style::default().fg(pal.phosphor_dim),
-        ),
-        Span::styled(format!("{} ", app.lifecycle.name()), Style::default().fg(pal.phosphor_dim)),
-    ])
+    let zoom_tag = if app.zoom == app.fit_zoom { " fit" } else { "" };
+    let state = Line::from(Span::styled(
+        format!("zoom {}/{}{zoom_tag} ", app.zoom + 1, ZOOMS.len()),
+        Style::default().fg(pal.phosphor_dim),
+    ))
     .right_aligned();
     frame.render_widget(Paragraph::new(state), area);
 }
 
 fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> CanvasView {
+    // Focus ring: bright while keys go to the graph, dim while an editor box in
+    // the panel has them. One bright outline at a time.
+    let graph_focused = !matches!(app.mode, Mode::EditNode { .. } | Mode::EditEdge { .. });
+    let frame_color = if graph_focused { pal.phosphor } else { pal.frame };
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(pal.frame))
+        .border_style(Style::default().fg(frame_color))
         .style(Style::default().bg(pal.canvas));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -233,7 +240,6 @@ impl Widget for SurfaceView<'_> {
 fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> (Rect, Rect, Vec<(Rect, usize)>) {
     let dim = Style::default().fg(pal.phosphor_dim);
     let bright = Style::default().fg(pal.phosphor);
-    let head = Style::default().fg(pal.phosphor).add_modifier(Modifier::BOLD);
     let filled = Style::default().fg(pal.ink).bg(pal.phosphor).add_modifier(Modifier::BOLD);
     let input = Style::default().fg(pal.ink).bg(pal.phosphor);
     let width = area.width.saturating_sub(2) as usize;
@@ -253,19 +259,16 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> (Rect,
     let copy_button = Rect { x: area.x + 1, y: area.y + 1, width: area.width.saturating_sub(2), height: 1 };
     let add_button = Rect { x: area.x + 1, y: area.y + 3, width: area.width.saturating_sub(2), height: 1 };
     frame.render_widget(Paragraph::new(top).style(Style::default().bg(pal.panel)), area);
-    let mut y = area.y + 5;
+    let y = area.y + 5;
 
-    // Node section: an outlined, titled editor while editing; a plain list otherwise.
+    // Below the buttons the panel stays empty until a Node or Edge is open for
+    // editing; then it shows one outlined, titled editor box.
+    let mut edge_rows: Vec<(Rect, usize)> = Vec::new();
+    let room = area.height.saturating_sub(y - area.y);
     match (&app.mode, app.selected_node()) {
         (Mode::EditNode { field, editing }, Some(node)) => {
-            let fields = NodeField::ALL.len() as u16;
-            let height = fields + 3; // border, title, fields, border
-            let block_area = Rect { x: area.x, y, width: area.width, height: height.min(area.height.saturating_sub(y - area.y)) };
-            let block = Block::default().borders(Borders::ALL).border_style(bright);
-            let inner = block.inner(block_area);
-            frame.render_widget(block, block_area);
-
-            let inner_w = inner.width as usize;
+            let inner_w = area.width.saturating_sub(2) as usize;
+            let value_w = inner_w.saturating_sub(7).max(4);
             let title = fit(&format!("Editing: '{}'", node.label), inner_w.saturating_sub(1));
             let mut lines = vec![Line::from(Span::styled(format!(" {title:<w$}", w = inner_w.saturating_sub(1)), filled))];
             for f in NodeField::ALL {
@@ -276,108 +279,69 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> (Rect,
                     NodeField::Description => node.description.clone().unwrap_or_default(),
                     NodeField::Size => format!("{:?} ⟳", node.size).to_lowercase(),
                 };
-                if picked && editing.is_some() {
-                    lines.push(Line::from(vec![
-                        Span::styled(format!("{marker}{:<6}", f.name()), bright),
-                        Span::styled(format!("{}▏", editing.as_deref().unwrap_or("")), input),
-                    ]));
-                } else {
-                    let style = if picked { bright } else { dim };
-                    lines.push(Line::from(vec![
-                        Span::styled(format!("{marker}{:<6}", f.name()), style),
-                        Span::styled(fit(&value, inner_w.saturating_sub(7)), style),
-                    ]));
+                let style = if picked { bright } else { dim };
+                let (text, text_style) = match (picked, editing) {
+                    (true, Some(buffer)) => (buffer.display(), input),
+                    _ => (value, style),
+                };
+                let wrapped = wrap_field(&text, value_w, FIELD_LINES);
+                for (i, part) in wrapped.into_iter().enumerate() {
+                    let name = if i == 0 { format!("{marker}{:<6}", f.name()) } else { "       ".into() };
+                    lines.push(Line::from(vec![Span::styled(name, style), Span::styled(part, text_style)]));
                 }
             }
+            let block_area = Rect { x: area.x, y, width: area.width, height: (lines.len() as u16 + 2).min(room) };
+            let block = Block::default().borders(Borders::ALL).border_style(bright);
+            let inner = block.inner(block_area);
+            frame.render_widget(block, block_area);
             frame.render_widget(Paragraph::new(lines), inner);
-            y += block_area.height;
         }
-        (_, Some(node)) => {
-            let field = |k: &str, v: String| {
-                Line::from(vec![Span::styled(format!(" {k:<6}"), dim), Span::styled(fit(&v, width.saturating_sub(7)), bright)])
-            };
-            let mut lines = vec![Line::from(Span::styled(" NODE", head)), field("id", node.id.clone()), field("label", node.label.clone())];
-            if let Some(d) = &node.description {
-                lines.push(field("desc", d.clone()));
-            }
-            lines.push(field("size", format!("{:?}", node.size).to_lowercase()));
-            lines.push(field("grid", format!("{}, {}", node.grid_position.x, node.grid_position.y)));
-            lines.push(Line::from(Span::styled(" ⏎ edit", dim)));
-            let h = lines.len() as u16;
-            frame.render_widget(Paragraph::new(lines), Rect { x: area.x, y, width: area.width, height: h.min(area.height.saturating_sub(y - area.y)) });
-            y += h;
-        }
-        (_, None) => {
-            let lines = vec![Line::from(Span::styled(" NODE", head)), Line::from(Span::styled(" none · a adds one", dim))];
-            frame.render_widget(Paragraph::new(lines), Rect { x: area.x, y, width: area.width, height: 2.min(area.height.saturating_sub(y - area.y)) });
-            y += 2;
-        }
-    }
-
-    // Edges section: an outlined editor for the picked Edge, else the list.
-    let mut edge_rows: Vec<(Rect, usize)> = Vec::new();
-    let mut lines: Vec<Line> = vec![Line::from(""), Line::from(Span::styled(" EDGES", head))];
-    let mut editor: Option<(Rect, Vec<Line>)> = None;
-    match &app.manifest {
-        Some(doc) if !doc.edges.is_empty() => {
-            for (i, edge) in doc.edges.iter().enumerate() {
-                let picked = app.focus == Focus::Edges && i == app.selected_edge;
-                let hovered = app.hover_edge == Some(i);
-                if picked {
-                    if let Mode::EditEdge { editing } = &app.mode {
-                        // Flush the list so far, then place the editor box.
-                        let h = lines.len() as u16;
-                        let list_area = Rect { x: area.x, y, width: area.width, height: h.min(area.height.saturating_sub(y - area.y)) };
-                        frame.render_widget(Paragraph::new(std::mem::take(&mut lines)), list_area);
-                        y += h;
-                        let block_area = Rect { x: area.x, y, width: area.width, height: 4.min(area.height.saturating_sub(y - area.y)) };
-                        let block = Block::default().borders(Borders::ALL).border_style(bright);
-                        let inner = block.inner(block_area);
-                        frame.render_widget(block, block_area);
-                        let inner_w = inner.width as usize;
-                        let title = fit(&format!("Editing: '{} → {}'", edge.from, edge.to), inner_w.saturating_sub(1));
-                        let mut body = vec![Line::from(Span::styled(format!(" {title:<w$}", w = inner_w.saturating_sub(1)), filled))];
-                        match editing {
-                            Some(buffer) => body.push(Line::from(vec![
-                                Span::styled("▶label ", bright),
-                                Span::styled(format!("{buffer}▏"), input),
-                            ])),
-                            None => body.push(Line::from(vec![
-                                Span::styled("▶label ", bright),
-                                Span::styled(fit(edge.label.as_deref().unwrap_or("(none)"), inner_w.saturating_sub(7)), bright),
-                            ])),
-                        }
-                        editor = Some((inner, body));
-                        edge_rows.push((block_area, i));
-                        y += block_area.height;
-                        continue;
-                    }
+        (Mode::EditEdge { editing }, _) => {
+            if let Some(edge) = app.manifest.as_ref().and_then(|d| d.edges.get(app.selected_edge)) {
+                let inner_w = area.width.saturating_sub(2) as usize;
+                let value_w = inner_w.saturating_sub(7).max(4);
+                let title = fit(&format!("Editing: '{} → {}'", edge.from, edge.to), inner_w.saturating_sub(1));
+                let mut body = vec![Line::from(Span::styled(format!(" {title:<w$}", w = inner_w.saturating_sub(1)), filled))];
+                let (text, text_style) = match editing {
+                    Some(buffer) => (buffer.display(), input),
+                    None => (edge.label.clone().unwrap_or_else(|| "(none)".into()), bright),
+                };
+                for (i, part) in wrap_field(&text, value_w, FIELD_LINES).into_iter().enumerate() {
+                    let name = if i == 0 { "▶label ".to_string() } else { "       ".into() };
+                    body.push(Line::from(vec![Span::styled(name, bright), Span::styled(part, text_style)]));
                 }
-                let marker = if picked { "▶" } else if hovered { "›" } else { " " };
-                let style = if picked || hovered { bright } else { dim };
-                let row_y = y + lines.len() as u16;
-                lines.push(Line::from(Span::styled(fit(&format!("{marker}{} → {}", edge.from, edge.to), width), style)));
-                edge_rows.push((Rect { x: area.x, y: row_y, width: area.width, height: 1 }, i));
-                if let Some(label) = &edge.label {
-                    let row_y = y + lines.len() as u16;
-                    lines.push(Line::from(Span::styled(fit(&format!("   \"{label}\""), width), style)));
-                    edge_rows.push((Rect { x: area.x, y: row_y, width: area.width, height: 1 }, i));
-                }
+                let block_area = Rect { x: area.x, y, width: area.width, height: (body.len() as u16 + 2).min(room) };
+                let block = Block::default().borders(Borders::ALL).border_style(bright);
+                let inner = block.inner(block_area);
+                frame.render_widget(block, block_area);
+                frame.render_widget(Paragraph::new(body), inner);
+                edge_rows.push((block_area, app.selected_edge));
             }
         }
-        _ => lines.push(Line::from(Span::styled(" none · c connects", dim))),
-    }
-    if let Mode::Connect { from } = &app.mode {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(fit(&format!(" linking from {from}"), width), bright)));
-    }
-    if let Some((inner, body)) = editor {
-        frame.render_widget(Paragraph::new(body), inner);
-    }
-    if y < area.y + area.height {
-        frame.render_widget(Paragraph::new(lines), Rect { x: area.x, y, width: area.width, height: area.y + area.height - y });
+        (Mode::Connect { from }, _) => {
+            let lines = vec![Line::from(Span::styled(fit(&format!(" linking from {from}"), width), bright))];
+            frame.render_widget(Paragraph::new(lines), Rect { x: area.x, y, width: area.width, height: 1.min(room) });
+        }
+        _ => {}
     }
     (copy_button, add_button, edge_rows)
+}
+
+/// Wrap a field value onto up to `max_lines` lines of `width`, keeping the tail
+/// (where the cursor is) visible when the text is longer than that.
+fn wrap_field(text: &str, width: usize, max_lines: usize) -> Vec<String> {
+    let mut lines = wrap(text, width, usize::MAX);
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    if lines.len() > max_lines {
+        let skip = lines.len() - max_lines;
+        lines = lines.split_off(skip);
+        if let Some(first) = lines.first_mut() {
+            *first = format!("…{}", first.chars().skip(1).collect::<String>());
+        }
+    }
+    lines
 }
 
 fn draw_footer(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) {

@@ -64,13 +64,80 @@ impl NodeField {
     }
 }
 
+/// A text field being typed into, with a cursor measured in characters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextInput {
+    pub text: String,
+    pub cursor: usize,
+}
+
+impl TextInput {
+    pub fn new(text: String) -> TextInput {
+        let cursor = text.chars().count();
+        TextInput { text, cursor }
+    }
+
+    fn byte_at(&self, char_index: usize) -> usize {
+        self.text.char_indices().nth(char_index).map_or(self.text.len(), |(b, _)| b)
+    }
+
+    pub fn len(&self) -> usize {
+        self.text.chars().count()
+    }
+
+    pub fn insert(&mut self, c: char) {
+        let at = self.byte_at(self.cursor);
+        self.text.insert(at, c);
+        self.cursor += 1;
+    }
+
+    pub fn backspace(&mut self) {
+        if self.cursor > 0 {
+            let start = self.byte_at(self.cursor - 1);
+            let end = self.byte_at(self.cursor);
+            self.text.replace_range(start..end, "");
+            self.cursor -= 1;
+        }
+    }
+
+    pub fn delete(&mut self) {
+        if self.cursor < self.len() {
+            let start = self.byte_at(self.cursor);
+            let end = self.byte_at(self.cursor + 1);
+            self.text.replace_range(start..end, "");
+        }
+    }
+
+    pub fn left(&mut self) {
+        self.cursor = self.cursor.saturating_sub(1);
+    }
+
+    pub fn right(&mut self) {
+        self.cursor = (self.cursor + 1).min(self.len());
+    }
+
+    pub fn home(&mut self) {
+        self.cursor = 0;
+    }
+
+    pub fn end(&mut self) {
+        self.cursor = self.len();
+    }
+
+    /// Text with a cursor mark inserted at the cursor, for display.
+    pub fn display(&self) -> String {
+        let at = self.byte_at(self.cursor);
+        format!("{}▏{}", &self.text[..at], &self.text[at..])
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
     Normal,
     /// The focused Edge is open for editing; its one field is the label.
-    EditEdge { editing: Option<String> },
+    EditEdge { editing: Option<TextInput> },
     /// The selected Node is open for editing: pick a field, then edit it.
-    EditNode { field: NodeField, editing: Option<String> },
+    EditNode { field: NodeField, editing: Option<TextInput> },
     /// A source Node is chosen; the selection now picks the target.
     Connect { from: String },
 }
@@ -462,7 +529,7 @@ impl App {
         });
         if applied {
             self.select_id(&new_id);
-            self.mode = Mode::EditNode { field: NodeField::Label, editing: Some(String::new()) };
+            self.mode = Mode::EditNode { field: NodeField::Label, editing: Some(TextInput::new(String::new())) };
         }
     }
 
@@ -564,12 +631,12 @@ impl App {
                     .and_then(|d| d.edges.get(self.selected_edge))
                     .map(|e| e.label.clone().unwrap_or_default());
                 if let Some(buffer) = current {
-                    self.mode = Mode::EditEdge { editing: Some(buffer) };
+                    self.mode = Mode::EditEdge { editing: Some(TextInput::new(buffer)) };
                 }
             }
             Mode::EditEdge { editing: Some(buffer) } => {
                 self.mode = Mode::EditEdge { editing: None };
-                let label = buffer.trim().to_owned();
+                let label = buffer.text.trim().to_owned();
                 let idx = self.selected_edge;
                 self.try_apply(|doc| {
                     let edge = doc.edges.get_mut(idx).ok_or("no Edge selected")?;
@@ -585,12 +652,12 @@ impl App {
                         NodeField::Label => node.label.clone(),
                         _ => node.description.clone().unwrap_or_default(),
                     };
-                    self.mode = Mode::EditNode { field, editing: Some(current) };
+                    self.mode = Mode::EditNode { field, editing: Some(TextInput::new(current)) };
                 }
             },
             Mode::EditNode { field, editing: Some(buffer) } => {
                 self.mode = Mode::EditNode { field, editing: None };
-                let value = buffer.trim().to_owned();
+                let value = buffer.text.trim().to_owned();
                 let Some(id) = self.selected.clone() else { return };
                 self.try_apply(|doc| {
                     let node = doc.nodes.iter_mut().find(|n| n.id == id).ok_or("no Node selected")?;
@@ -619,19 +686,40 @@ impl App {
         }
     }
 
-    pub fn edit_push(&mut self, c: char) {
+    fn input_mut(&mut self) -> Option<&mut TextInput> {
         match &mut self.mode {
-            Mode::EditEdge { editing: Some(buffer) } | Mode::EditNode { editing: Some(buffer), .. } => buffer.push(c),
-            _ => {}
+            Mode::EditEdge { editing: Some(input) } | Mode::EditNode { editing: Some(input), .. } => Some(input),
+            _ => None,
+        }
+    }
+
+    pub fn edit_push(&mut self, c: char) {
+        if let Some(input) = self.input_mut() {
+            input.insert(c);
         }
     }
 
     pub fn edit_pop(&mut self) {
-        match &mut self.mode {
-            Mode::EditEdge { editing: Some(buffer) } | Mode::EditNode { editing: Some(buffer), .. } => {
-                buffer.pop();
+        if let Some(input) = self.input_mut() {
+            input.backspace();
+        }
+    }
+
+    pub fn edit_delete(&mut self) {
+        if let Some(input) = self.input_mut() {
+            input.delete();
+        }
+    }
+
+    /// Move the text cursor: -1 left, 1 right, i64::MIN home, i64::MAX end.
+    pub fn edit_cursor(&mut self, step: i64) {
+        if let Some(input) = self.input_mut() {
+            match step {
+                i64::MIN => input.home(),
+                i64::MAX => input.end(),
+                s if s < 0 => input.left(),
+                _ => input.right(),
             }
-            _ => {}
         }
     }
 
@@ -1074,6 +1162,33 @@ mod tests {
         app.delete();
         assert!(app.manifest.as_ref().unwrap().edges.is_empty());
         assert_eq!(app.focus, Focus::Nodes);
+    }
+
+    #[test]
+    fn text_cursor_moves_inserts_and_deletes_in_the_middle() {
+        let dir = temp_dir("cursor");
+        let mut app = open_with(&dir, &two_nodes());
+        app.select_id("a");
+        app.activate();
+        app.activate(); // typing the label "A"
+        for c in "bc".chars() {
+            app.edit_push(c);
+        }
+        app.edit_cursor(i64::MIN); // home
+        app.edit_push('>');
+        app.edit_cursor(1);
+        app.edit_cursor(1); // after 'A' 'b'? cursor: '>' 'A' | 'b' 'c'
+        app.edit_delete(); // removes 'b'
+        app.edit_cursor(i64::MAX);
+        app.edit_pop(); // removes 'c'
+        app.edit_push('!');
+        let shown = match &app.mode {
+            Mode::EditNode { editing: Some(input), .. } => input.display(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(shown, ">A!▏");
+        app.activate();
+        assert_eq!(app.selected_node().unwrap().label, ">A!");
     }
 
     #[test]
