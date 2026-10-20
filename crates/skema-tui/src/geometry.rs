@@ -126,6 +126,19 @@ pub fn fit_zoom(nodes: &[Node], min_columns: i64, min_rows: i64, width: i64, hei
         .unwrap_or(0)
 }
 
+/// Connection handles drawn on the box border at the middle of each side. A
+/// one-row box has only its left and right ends.
+pub fn handles(rect: &Rect) -> Vec<(i64, i64)> {
+    let mid_row = rect.row + rect.h / 2;
+    let mid_col = rect.col + rect.w / 2;
+    let mut out = vec![(rect.col, mid_row), (rect.col + rect.w - 1, mid_row)];
+    if rect.h >= 3 {
+        out.push((mid_col, rect.row));
+        out.push((mid_col, rect.row + rect.h - 1));
+    }
+    out
+}
+
 /// The four side-midpoint ports of a Node box.
 pub fn ports(rect: &Rect) -> [Port; 4] {
     let mid_row = rect.row + rect.h / 2;

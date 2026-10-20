@@ -191,6 +191,10 @@ pub struct App {
     /// What the mouse is over on the canvas.
     pub hover_node: Option<String>,
     pub hover_edge: Option<usize>,
+    /// A Node is being dragged with the mouse; hides the tooltip meanwhile.
+    pub dragging: bool,
+    /// Surface point under the cursor while connecting, for the rubber-band Edge.
+    pub link_cursor: Option<(i64, i64)>,
     /// Write the Manifest and SVG after every accepted edit.
     pub autosave: bool,
     /// A panel button that was just clicked, shown inverted until the instant passes.
@@ -227,6 +231,8 @@ impl App {
             link_preview: None,
             hover_node: None,
             hover_edge: None,
+            dragging: false,
+            link_cursor: None,
             autosave: true,
             flash: None,
             zoom: crate::geometry::DEFAULT_ZOOM,
@@ -385,6 +391,23 @@ impl App {
         doc.nodes.iter().rev().find(|n| zoom.node_rect(n).contains(col, row)).map(|n| n.id.clone())
     }
 
+    /// The Node whose connection handle (a border-midpoint cell) is under a surface point.
+    pub fn port_at_point(&self, zoom: &crate::geometry::Zoom, col: i64, row: i64) -> Option<String> {
+        let doc = self.manifest.as_ref()?;
+        doc.nodes
+            .iter()
+            .rev()
+            .find(|n| crate::geometry::handles(&zoom.node_rect(n)).contains(&(col, row)))
+            .map(|n| n.id.clone())
+    }
+
+    /// Start a connect from a Node, as `c` or a press on one of its connection points does.
+    pub fn start_connect_from(&mut self, id: &str) {
+        self.select_id(id);
+        self.mode = Mode::Connect { from: id.to_owned() };
+        self.info("drag or click onto the target Node · esc cancels");
+    }
+
     pub fn node_id_at_cell(&self, x: i64, y: i64) -> Option<String> {
         let doc = self.manifest.as_ref()?;
         doc.nodes.iter().find(|n| n.grid_position.x == x && n.grid_position.y == y).map(|n| n.id.clone())
@@ -540,6 +563,7 @@ impl App {
                 let Some(to) = self.selected.clone() else { return };
                 self.mode = Mode::Normal;
                 self.link_preview = None;
+                self.link_cursor = None;
                 self.connect_ids(&from, &to);
             }
             _ => {
@@ -726,6 +750,7 @@ impl App {
     /// Esc steps back one level: typing → field list → normal.
     pub fn cancel(&mut self) {
         self.link_preview = None;
+        self.link_cursor = None;
         self.mode = match &self.mode {
             Mode::EditNode { field, editing: Some(_) } => Mode::EditNode { field: *field, editing: None },
             Mode::EditEdge { editing: Some(_) } => Mode::EditEdge { editing: None },

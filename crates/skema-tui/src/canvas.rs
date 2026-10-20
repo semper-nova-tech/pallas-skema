@@ -141,6 +141,10 @@ pub struct View<'a> {
     pub ghost: Option<Ghost>,
     /// Mouse or hover connect preview: (source id, target id) as a dashed Edge.
     pub link: Option<(&'a str, &'a str)>,
+    /// Show the four connection points of this Node (the hovered one).
+    pub show_ports: Option<&'a str>,
+    /// Rubber band: a dashed line from the connect source toward this surface point.
+    pub link_cursor: Option<(i64, i64)>,
 }
 
 /// Render the Diagram at a zoom level with only a selection (tests and dumps).
@@ -156,7 +160,7 @@ pub fn draw(
 
 /// Render the Diagram at a zoom level.
 pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
-    let View { selected, selected_edge, hover_node, hover_edge, connect_from, ghost, link } = *view;
+    let View { selected, selected_edge, hover_node, hover_edge, connect_from, ghost, link, show_ports, link_cursor } = *view;
     let style = diagram_style();
     let pal = palette();
     let (cols, rows) = zoom.surface_size(&doc.nodes, style.min_columns, style.min_rows);
@@ -202,6 +206,35 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
     if let Some(g) = ghost {
         draw_ghost(&mut s, zoom, g, &pal);
     }
+    // Rubber band toward the cursor while no target Node is under it.
+    if let (Some(from_id), None, Some((cc, cr))) = (connect_from, link, link_cursor) {
+        if let Some(from) = doc.nodes.iter().find(|n| n.id == from_id) {
+            let fr = zoom.node_rect(from);
+            if !fr.contains(cc, cr) {
+                let src = facing_port(&fr, cc, cr);
+                let dst_side = match src.side {
+                    Side::Left => Side::Right,
+                    Side::Right => Side::Left,
+                    Side::Top => Side::Bottom,
+                    Side::Bottom => Side::Top,
+                };
+                let dst = Port { col: cc, row: cr, side: dst_side };
+                for pair in route(src, dst).windows(2) {
+                    let (a, b) = (pair[0], pair[1]);
+                    if a.1 == b.1 {
+                        for x in a.0.min(b.0)..=a.0.max(b.0) {
+                            s.put_fg(x, a.1, '┄', pal.phosphor_dim);
+                        }
+                    } else {
+                        for y in a.1.min(b.1)..=a.1.max(b.1) {
+                            s.put_fg(a.0, y, '┆', pal.phosphor_dim);
+                        }
+                    }
+                }
+                s.put_fg(cc, cr, '◌', pal.phosphor);
+            }
+        }
+    }
     if let Some((from_id, to_id)) = link {
         if let (Some(from), Some(to)) = (
             doc.nodes.iter().find(|n| n.id == from_id),
@@ -231,6 +264,17 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
                     Side::Bottom => '▲',
                 };
                 s.put_fg(dst.col, dst.row, head, pal.phosphor);
+            }
+        }
+    }
+    // Connection handles on the hovered Node's border, filled on the connect source.
+    for (id, filled) in [(show_ports, false), (connect_from, true)] {
+        if let Some(node) = id.and_then(|id| doc.nodes.iter().find(|n| n.id == id)) {
+            let r = zoom.node_rect(node);
+            let is_selected = selected == Some(node.id.as_str());
+            let fg = if is_selected { pal.ink } else { pal.phosphor };
+            for (col, row) in crate::geometry::handles(&r) {
+                s.put_fg(col, row, if filled { '●' } else { '○' }, fg);
             }
         }
     }
@@ -743,6 +787,24 @@ mod tests {
         // Compact zoom: label must fit the brackets.
         assert!(!node_overflows(&ZOOMS[0], &mk("Ship", None, "medium")));
         assert!(node_overflows(&ZOOMS[0], &mk("Ship it now", None, "medium")));
+    }
+
+    #[test]
+    fn hovered_node_shows_connection_points_and_a_rubber_band_follows_the_cursor() {
+        let doc = parse_manifest(include_str!("../../../examples/flow.json")).unwrap();
+        let s = draw_view(&doc, &Z, &View { show_ports: Some("intake"), ..View::default() });
+        let r = Z.node_rect(&doc.nodes[0]);
+        let handles = crate::geometry::handles(&r);
+        assert_eq!(handles.len(), 4);
+        for (col, row) in &handles {
+            assert_eq!(s.get(*col, *row).unwrap().ch, '○', "handle at {:?}", (col, row));
+            assert!(r.contains(*col, *row), "handles sit on the box border");
+        }
+        let cursor = (r.col + r.w + 20, r.row + 1);
+        let s = draw_view(&doc, &Z, &View { connect_from: Some("intake"), link_cursor: Some(cursor), ..View::default() });
+        assert_eq!(s.get(cursor.0, cursor.1).unwrap().ch, '◌');
+        assert_eq!(s.get(r.col + r.w + 5, r.row + 1).unwrap().ch, '┄');
+        assert_eq!(s.get(r.col + r.w - 1, r.row + 1).unwrap().ch, '●', "source handle is filled");
     }
 
     #[test]

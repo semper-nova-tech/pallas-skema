@@ -131,6 +131,8 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
             connect_from,
             ghost,
             link,
+            show_ports: if app.dragging { None } else { app.hover_node.as_deref() },
+            link_cursor: app.link_cursor,
         },
     );
 
@@ -163,9 +165,9 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
 
     SurfaceView { surface: &surface, scroll: app.scroll }.render(inner, frame.buffer_mut());
 
-    // Tooltip: only for a hovered Node whose text was cut short.
+    // Tooltip: only for a hovered Node whose text was cut short, and never mid-drag.
     if let Some(node) = app.hover_node.as_deref().and_then(|id| doc.nodes.iter().find(|n| n.id == id)) {
-        if node_overflows(zoom, node) {
+        if !app.dragging && node_overflows(zoom, node) {
             draw_tooltip(frame, inner, app.scroll, zoom, node, pal);
         }
     }

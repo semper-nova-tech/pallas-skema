@@ -39,6 +39,8 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
     let mut hits = Hits::default();
     let mut view = CanvasView::default();
     let mut drag: Option<(String, u16, u16)> = None;
+    // A connect started by pressing a connection point; release on a Node finishes it.
+    let mut port_drag = false;
     // Last click target for double-click detection: a Node id or an Edge index.
     let mut last_click: Option<(Instant, String)> = None;
     while !app.should_quit {
@@ -91,8 +93,17 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                         app.mode = Mode::Normal;
                     }
                     let zoom = &ZOOMS[app.zoom];
-                    let hit = surface_point(&view, mouse.column, mouse.row)
-                        .and_then(|(c, r)| app.node_at_point(zoom, c, r));
+                    let point = surface_point(&view, mouse.column, mouse.row);
+                    let hit = point.and_then(|(c, r)| app.node_at_point(zoom, c, r));
+                    // A press on a connection handle starts a connect from that Node.
+                    if !matches!(app.mode, Mode::Connect { .. } | Mode::EditNode { .. } | Mode::EditEdge { .. }) {
+                        if let Some(from) = point.and_then(|(c, r)| app.port_at_point(zoom, c, r)) {
+                            app.start_connect_from(&from);
+                            app.link_cursor = point;
+                            port_drag = true;
+                            continue;
+                        }
+                    }
                     // Canvas: an Edge line under the cursor, when no Node is there.
                     if hit.is_none() && !matches!(app.mode, Mode::Connect { .. }) {
                         if let Some(i) = surface_point(&view, mouse.column, mouse.row)
@@ -131,6 +142,7 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                                 app.begin_label_edit();
                             } else {
                                 drag = Some((id, mouse.column, mouse.row));
+                                app.dragging = true;
                             }
                         }
                         (_, None) => {}
@@ -169,6 +181,7 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                         let from = from.clone();
                         let over = node.clone().filter(|id| *id != from);
                         app.link_preview = Some((from, over));
+                        app.link_cursor = surface_point(&view, mouse.column, mouse.row);
                     }
                     app.hover_node = node;
                 }
@@ -198,6 +211,19 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                         }
                     }
                 }
+                MouseEventKind::Drag(MouseButton::Left) if port_drag => {
+                    // Dragging out of a connection point: rubber band follows, target previews.
+                    if let Mode::Connect { from } = &app.mode {
+                        let from = from.clone();
+                        let point = surface_point(&view, mouse.column, mouse.row);
+                        let over = point
+                            .and_then(|(c, r)| app.node_at_point(&ZOOMS[app.zoom], c, r))
+                            .filter(|id| *id != from);
+                        app.hover_node = over.clone();
+                        app.link_preview = Some((from, over));
+                        app.link_cursor = point;
+                    }
+                }
                 MouseEventKind::Drag(MouseButton::Left) => {
                     if let Some((id, col0, row0)) = &drag {
                         if app.selected.as_deref() == Some(id.as_str()) {
@@ -208,6 +234,23 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                 }
                 MouseEventKind::Up(MouseButton::Left) => {
                     app.drag_ghost = None;
+                    app.dragging = false;
+                    // Releasing a port drag on another Node connects; elsewhere the
+                    // connect stays live for a click on the target.
+                    if port_drag {
+                        port_drag = false;
+                        if let Mode::Connect { from } = app.mode.clone() {
+                            let over = surface_point(&view, mouse.column, mouse.row)
+                                .and_then(|(c, r)| app.node_at_point(&ZOOMS[app.zoom], c, r));
+                            if let Some(to) = over.filter(|to| *to != from) {
+                                app.mode = Mode::Normal;
+                                app.link_preview = None;
+                                app.link_cursor = None;
+                                app.select_id(&to);
+                                app.connect_ids(&from, &to);
+                            }
+                        }
+                    }
                     if let Some((id, col0, row0)) = drag.take() {
                         let (dx, dy) = ZOOMS[app.zoom].snap_delta(col0 as i64, row0 as i64, mouse.column as i64, mouse.row as i64);
                         if (dx, dy) != (0, 0) && app.selected.as_deref() == Some(id.as_str()) {
