@@ -9,12 +9,7 @@ a terminal Editor, in a Herdr pane beside the agent, and arranges it by hand.
 Both see the same picture, because there is only one source of truth and one
 renderer.
 
-```text
-JSON Manifest  ──render──▶  SVG / PNG
-      ▲                        │
-      │  edits                 │  review
-   Agent  ◀── same file ──▶  Person in the terminal Editor
-```
+<img width="991" height="616" alt="image" src="https://github.com/user-attachments/assets/40e55c60-cb69-4b5b-a4ab-18bc31933422" />
 
 - Invalid diagrams never render. Validation names the broken rule and leaves
   the last good picture untouched.
