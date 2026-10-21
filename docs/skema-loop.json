@@ -1,0 +1,85 @@
+{
+  "nodes": [
+    {
+      "id": "agent",
+      "label": "Agent",
+      "description": "edits the file \u00b7 runs skema render",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "manifest",
+      "label": "JSON Manifest",
+      "description": "one file \u00b7 the source of truth",
+      "type": "note",
+      "size": "large",
+      "gridPosition": {
+        "x": 4,
+        "y": 0
+      }
+    },
+    {
+      "id": "render",
+      "label": "skema render",
+      "description": "validate first \u00b7 same input, same picture",
+      "type": "decision",
+      "size": "medium",
+      "gridPosition": {
+        "x": 9,
+        "y": 0
+      }
+    },
+    {
+      "id": "picture",
+      "label": "SVG / PNG",
+      "description": "deterministic picture",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 13,
+        "y": 3
+      }
+    },
+    {
+      "id": "person",
+      "label": "Person",
+      "description": "terminal Editor in a Herdr pane \u00b7 reloads on agent writes",
+      "type": "process",
+      "size": "large",
+      "gridPosition": {
+        "x": 8,
+        "y": 3
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "agent",
+      "to": "manifest",
+      "label": "edits"
+    },
+    {
+      "from": "manifest",
+      "to": "render"
+    },
+    {
+      "from": "render",
+      "to": "picture",
+      "label": "valid"
+    },
+    {
+      "from": "picture",
+      "to": "person",
+      "label": "review"
+    },
+    {
+      "from": "person",
+      "to": "manifest",
+      "label": "arranges \u00b7 autosaves"
+    }
+  ]
+}
