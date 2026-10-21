@@ -1,0 +1,13 @@
+{
+  "name": "pallas-skema",
+  "version": "0.1.0",
+  "description": "Diagram in tandem with a person: edit a JSON Manifest, render a deterministic SVG, and open the terminal Editor in a Herdr pane.",
+  "license": "MIT",
+  "keywords": [
+    "diagram",
+    "svg",
+    "herdr",
+    "tui"
+  ],
+  "skills": "./skills/"
+}

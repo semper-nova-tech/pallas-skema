@@ -1,13 +1,83 @@
-# pallas-skema
+# Pallas Skema
 
-AI and human friendly diagram protocol.
+Diagrams that an agent and a person edit together.
 
-- [Product brief and technical design](pallas-skema.md)
-- [Brainstorming and delivery strategy](brainstorming.md)
+A Skema diagram is one small JSON file: nodes on a grid, edges between them,
+labels and descriptions. The agent edits that file and runs one command to
+validate it and render a deterministic SVG. The person opens the same file in
+a terminal Editor, in a Herdr pane beside the agent, and arranges it by hand.
+Both see the same picture, because there is only one source of truth and one
+renderer.
 
-Repository: [https://github.com/semper-nova-tech/pallas-skema](https://github.com/semper-nova-tech/pallas-skema)
+```text
+JSON Manifest  ──render──▶  SVG / PNG
+      ▲                        │
+      │  edits                 │  review
+   Agent  ◀── same file ──▶  Person in the terminal Editor
+```
 
-JSON > Diagram > Editor > SVG. Bridging the design and comprehension gap
+- Invalid diagrams never render. Validation names the broken rule and leaves
+  the last good picture untouched.
+- The same manifest always produces the same SVG, so diffs are small and
+  reviewable.
+- The Editor snaps to the grid, refuses moves that would overlap, and saves
+  every accepted edit at once. An agent's write shows up in the pane as it
+  happens.
+
+## Install for your agent
+
+The skill `skema-diagram` teaches an agent how to create and change diagrams,
+when to render, and how to open the Editor pane for you. It is one directory
+that every host reads in the same format.
+
+**Claude Code**
+
+```bash
+claude plugin marketplace add semper-nova-tech/pallas-skema
+claude plugin install pallas-skema@pallas-skema
+```
+
+**Cursor**
+
+Add this repository as a plugin; it carries `.cursor-plugin/plugin.json`
+pointing at the same `skills/` directory.
+
+**OpenAI Codex**
+
+```bash
+git clone https://github.com/semper-nova-tech/pallas-skema
+ln -s "$PWD/pallas-skema/skills/skema-diagram" ~/.codex/skills/skema-diagram
+```
+
+**Herdr** (the Editor as a pane)
+
+```bash
+herdr plugin install semper-nova-tech/pallas-skema/herdr-plugin
+```
+
+The agent and the pane both need the `skema` binary. Today that means a Rust
+toolchain and `cargo build --release` in this repository; the Herdr plugin's
+build step does this for you when cargo is present. Prebuilt binaries are the
+next step.
+
+## Try it
+
+```bash
+# agent side: edit flow.json, then
+skema render --manifest flow.json --svg flow.svg
+
+# person side, inside Herdr
+herdr plugin pane open --plugin pallas.skema --entrypoint editor \
+  --env SKEMA_MANIFEST=$PWD/flow.json --focus
+```
+
+`examples/flow.json` is a small four-node flow to start from.
+
+---
+
+Reference for contributors follows. Design documents:
+[product brief](pallas-skema.md), [delivery strategy](brainstorming.md),
+[feature docs](docs/features/skema-v1/README.md).
 
 ## Build
 
