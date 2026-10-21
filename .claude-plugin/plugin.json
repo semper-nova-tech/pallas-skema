@@ -3,7 +3,17 @@
   "displayName": "Pallas Skema",
   "version": "0.1.0",
   "description": "Diagram in tandem with a person: edit a JSON Manifest, render a deterministic SVG, and open the terminal Editor in a Herdr pane.",
+  "author": {
+    "name": "John Marlett",
+    "url": "https://github.com/jmarlett93"
+  },
+  "repository": "https://github.com/semper-nova-tech/pallas-skema",
   "license": "MIT",
-  "keywords": ["diagram", "svg", "herdr", "tui"],
+  "keywords": [
+    "diagram",
+    "svg",
+    "herdr",
+    "tui"
+  ],
   "skills": "./skills/"
 }
