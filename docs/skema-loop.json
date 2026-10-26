@@ -3,7 +3,7 @@
     {
       "id": "agent",
       "label": "Agent",
-      "description": "edits the file \u00b7 runs skema render",
+      "description": "edits files · runs skema render",
       "type": "process",
       "size": "medium",
       "gridPosition": {
@@ -14,7 +14,7 @@
     {
       "id": "manifest",
       "label": "JSON Manifest",
-      "description": "one file \u00b7 the source of truth",
+      "description": "Source of Truth",
       "type": "note",
       "size": "large",
       "gridPosition": {
@@ -25,7 +25,7 @@
     {
       "id": "render",
       "label": "skema render",
-      "description": "validate first \u00b7 same input, same picture",
+      "description": "validate first · same input, same picture",
       "type": "decision",
       "size": "medium",
       "gridPosition": {
@@ -36,22 +36,22 @@
     {
       "id": "picture",
       "label": "SVG / PNG",
-      "description": "deterministic picture",
+      "description": "copy to clip",
       "type": "process",
       "size": "medium",
       "gridPosition": {
-        "x": 13,
+        "x": 9,
         "y": 3
       }
     },
     {
       "id": "person",
       "label": "Person",
-      "description": "terminal Editor in a Herdr pane \u00b7 reloads on agent writes",
+      "description": "TUI or Prompt",
       "type": "process",
       "size": "large",
       "gridPosition": {
-        "x": 8,
+        "x": 4,
         "y": 3
       }
     }
@@ -79,7 +79,11 @@
     {
       "from": "person",
       "to": "manifest",
-      "label": "arranges \u00b7 autosaves"
+      "label": "arranges · autosaves"
+    },
+    {
+      "from": "person",
+      "to": "agent"
     }
   ]
 }
