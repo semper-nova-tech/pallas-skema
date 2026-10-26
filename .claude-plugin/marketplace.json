@@ -17,8 +17,12 @@
       "repository": "https://github.com/semper-nova-tech/pallas-skema",
       "license": "MIT",
       "category": "development",
-      "tags": ["diagram", "svg", "herdr"],
-      "version": "0.1.0"
+      "tags": [
+        "diagram",
+        "svg",
+        "herdr"
+      ],
+      "version": "0.2.0"
     }
   ]
 }

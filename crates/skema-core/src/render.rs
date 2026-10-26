@@ -2,20 +2,32 @@ use std::fs;
 use std::path::Path;
 
 use crate::manifest::{ManifestDocument, Node, NodeType};
-use crate::style::{diagram_style, node_box, DiagramStyle};
+use crate::style::{node_box, DiagramStyle};
 use crate::svg::SvgOutput;
 use crate::validation::{validate_manifest, TextFailure};
 
-/// SVG markup for a Manifest that passes Validation, without touching disk.
+/// SVG markup for a Manifest that passes Validation, in the remembered theme.
 pub fn render_svg_string(manifest: &ManifestDocument) -> Result<String, TextFailure> {
-    validate_manifest(manifest)?;
-    Ok(build_svg(manifest))
+    render_svg_string_with(manifest, &crate::theme::current_style())
 }
 
-/// Produce SVG from a Manifest that passes Validation (wire: renderManifest).
-pub fn render_manifest(
+/// SVG markup in a given style, without touching disk.
+pub fn render_svg_string_with(manifest: &ManifestDocument, style: &DiagramStyle) -> Result<String, TextFailure> {
+    validate_manifest(manifest)?;
+    Ok(build_svg(manifest, style))
+}
+
+/// Produce SVG from a Manifest that passes Validation, in the remembered theme (wire: renderManifest).
+pub fn render_manifest(manifest: &ManifestDocument, svg_path: &Path) -> Result<SvgOutput, TextFailure> {
+    render_manifest_with(manifest, svg_path, &crate::theme::current_style())
+}
+
+/// Produce SVG in a given style. Validation runs first; a failed Validation leaves
+/// an existing SVG untouched.
+pub fn render_manifest_with(
     manifest: &ManifestDocument,
     svg_path: &Path,
+    style: &DiagramStyle,
 ) -> Result<SvgOutput, TextFailure> {
     validate_manifest(manifest)?;
 
@@ -27,7 +39,7 @@ pub fn render_manifest(
         None
     };
 
-    let svg = build_svg(manifest);
+    let svg = build_svg(manifest, style);
     let bytes = svg.into_bytes();
 
     if let Some(ref old) = prior {
@@ -42,8 +54,7 @@ pub fn render_manifest(
     Ok(SvgOutput { bytes })
 }
 
-fn build_svg(manifest: &ManifestDocument) -> String {
-    let style = diagram_style();
+fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
     let nodes: Vec<&Node> = manifest.nodes.iter().collect();
     let (width, height) = canvas_size(style, &nodes);
     let color = &style.color;
@@ -91,11 +102,19 @@ fn build_svg(manifest: &ManifestDocument) -> String {
         };
         let fr = node_rect(style, from);
         let tr = node_rect(style, to);
-        let src = facing_port(fr, rect_center(tr));
-        let dst = ranked_ports(tr, rect_center(fr))
-            .into_iter()
-            .find(|p| !taken.contains(&(to.id.clone(), p.side)))
-            .unwrap_or_else(|| facing_port(tr, rect_center(fr)));
+        // An explicit side in the Manifest wins; otherwise the facing rule decides.
+        let cell = style.cell;
+        let src = match edge.from_side {
+            Some(side) => port_on(fr, side.into(), cell),
+            None => facing_port(fr, rect_center(tr), cell),
+        };
+        let dst = match edge.to_side {
+            Some(side) => port_on(tr, side.into(), cell),
+            None => ranked_ports(tr, rect_center(fr), cell)
+                .into_iter()
+                .find(|p| !taken.contains(&(to.id.clone(), p.side)))
+                .unwrap_or_else(|| facing_port(tr, rect_center(fr), cell)),
+        };
         taken.insert((to.id.clone(), dst.side));
         let pts = route(src, dst);
         let d: Vec<String> = pts
@@ -258,18 +277,49 @@ struct Port {
     side: Side,
 }
 
+impl From<crate::manifest::Side> for Side {
+    fn from(side: crate::manifest::Side) -> Side {
+        match side {
+            crate::manifest::Side::Left => Side::Left,
+            crate::manifest::Side::Right => Side::Right,
+            crate::manifest::Side::Top => Side::Top,
+            crate::manifest::Side::Bottom => Side::Bottom,
+        }
+    }
+}
+
+/// Left and right ports sit on the Grid row's center line, not the box's own
+/// middle, so Nodes of different heights on one row connect with a straight
+/// line. Top and bottom ports sit at the box's horizontal middle.
+fn side_port_y(y: i64, cell: i64) -> i64 {
+    y + cell / 2
+}
+
+/// The midpoint port on a given side.
+fn port_on((x, y, w, h): PxRect, side: Side, cell: i64) -> Port {
+    let cx = x + w / 2;
+    let cy = side_port_y(y, cell);
+    match side {
+        Side::Left => Port { x, y: cy, side },
+        Side::Right => Port { x: x + w, y: cy, side },
+        Side::Top => Port { x: cx, y, side },
+        Side::Bottom => Port { x: cx, y: y + h, side },
+    }
+}
+
 /// The four side-midpoint ports ordered by how squarely each faces a point,
 /// measured in half-box units so a wide box still prefers top or bottom when
 /// the target is above or below.
-fn ranked_ports((x, y, w, h): PxRect, (tx, ty): (i64, i64)) -> [Port; 4] {
+fn ranked_ports((x, y, w, h): PxRect, (tx, ty): (i64, i64), cell: i64) -> [Port; 4] {
     let (cx, cy) = (x + w / 2, y + h / 2);
     let dx = (tx - cx) as f64 / (w as f64 / 2.0).max(1.0);
     let dy = (ty - cy) as f64 / (h as f64 / 2.0).max(1.0);
+    let rect = (x, y, w, h);
     let mut ports = [
-        (dx, Port { x: x + w, y: cy, side: Side::Right }),
-        (-dx, Port { x, y: cy, side: Side::Left }),
-        (dy, Port { x: cx, y: y + h, side: Side::Bottom }),
-        (-dy, Port { x: cx, y, side: Side::Top }),
+        (dx, port_on(rect, Side::Right, cell)),
+        (-dx, port_on(rect, Side::Left, cell)),
+        (dy, port_on(rect, Side::Bottom, cell)),
+        (-dy, port_on(rect, Side::Top, cell)),
     ];
     // Stable sort keeps the Right/Left-before-Bottom/Top tie-break of the facing rule.
     ports.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -277,8 +327,8 @@ fn ranked_ports((x, y, w, h): PxRect, (tx, ty): (i64, i64)) -> [Port; 4] {
 }
 
 /// The port that faces a point best.
-fn facing_port(rect: PxRect, toward: (i64, i64)) -> Port {
-    ranked_ports(rect, toward)[0]
+fn facing_port(rect: PxRect, toward: (i64, i64), cell: i64) -> Port {
+    ranked_ports(rect, toward, cell)[0]
 }
 
 /// Orthogonal polyline from port to port, mirroring the terminal Editor's routing.
@@ -470,18 +520,25 @@ mod tests {
                     grid_position: GridPosition { x: 2, y: 0 },
                 },
             ],
-            edges: vec![Edge {
-                from: "start".into(),
-                to: "decide".into(),
-                label: Some("next".into()),
-            }],
+            edges: vec![Edge { label: Some("next".into()), ..Edge::new("start", "decide") }],
         }
     }
 
     #[test]
+    fn explicit_edge_sides_override_the_facing_rule() {
+        let mut doc = sample();
+        doc.edges[0].from_side = Some(crate::manifest::Side::Bottom);
+        doc.edges[0].to_side = Some(crate::manifest::Side::Top);
+        let svg = build_svg(&doc, crate::style::diagram_style());
+        // start bottom (92,80) → decide top (192,28): vertical-vertical with a jog.
+        assert!(svg.contains(r#"<path d="M92 80 L92 54 L192 54 L192 28""#), "{svg}");
+        assert!(svg.contains("<polygon points=\"192,28 "), "arrowhead at the top port");
+    }
+
+    #[test]
     fn svg_uses_shared_editor_style() {
-        let svg = build_svg(&sample());
-        let style = diagram_style();
+        let style = crate::style::diagram_style();
+        let svg = build_svg(&sample(), style);
         assert!(svg.contains(&style.color.canvas));
         assert!(svg.contains(&style.color.phosphor));
         assert!(svg.contains(&style.color.node_fill));
@@ -489,9 +546,10 @@ mod tests {
         assert!(svg.contains(&style.font_family));
         assert!(svg.contains("kicks things off"), "description sits inside the box");
         assert!(!svg.contains("process · medium") && !svg.contains("decision · small"), "the type is not drawn");
-        // start (medium at 0,0) → decide (small at 2,0): right port to left port with one jog.
-        assert!(svg.contains(r#"<path d="M156 54 L148 54 L148 50 L140 50""#), "{svg}");
-        assert!(svg.contains("<polygon points=\"140,50 "), "arrowhead at the target port");
+        // start (medium) → decide (small) share a Grid row, so despite different box
+        // heights the Edge is one straight line on the row's center (y = 28 + 56/2).
+        assert!(svg.contains(r#"<path d="M156 56 L140 56""#), "{svg}");
+        assert!(svg.contains("<polygon points=\"140,56 "), "arrowhead at the target port");
         assert!(svg.contains(r#"width="896" height="560""#));
     }
 }

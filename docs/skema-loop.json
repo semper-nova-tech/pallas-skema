@@ -1,0 +1,89 @@
+{
+  "nodes": [
+    {
+      "id": "agent",
+      "label": "Agent",
+      "description": "edits files · runs skema render",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "manifest",
+      "label": "JSON Manifest",
+      "description": "Source of Truth",
+      "type": "note",
+      "size": "large",
+      "gridPosition": {
+        "x": 4,
+        "y": 0
+      }
+    },
+    {
+      "id": "render",
+      "label": "skema render",
+      "description": "validate first · same input, same picture",
+      "type": "decision",
+      "size": "medium",
+      "gridPosition": {
+        "x": 9,
+        "y": 0
+      }
+    },
+    {
+      "id": "picture",
+      "label": "SVG / PNG",
+      "description": "copy to clip",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 9,
+        "y": 3
+      }
+    },
+    {
+      "id": "person",
+      "label": "Person",
+      "description": "TUI or Prompt",
+      "type": "process",
+      "size": "large",
+      "gridPosition": {
+        "x": 4,
+        "y": 3
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "agent",
+      "to": "manifest",
+      "label": "edits"
+    },
+    {
+      "from": "manifest",
+      "to": "render"
+    },
+    {
+      "from": "render",
+      "to": "picture",
+      "label": "valid"
+    },
+    {
+      "from": "picture",
+      "to": "person",
+      "label": "review"
+    },
+    {
+      "from": "person",
+      "to": "manifest",
+      "label": "arranges · autosaves"
+    },
+    {
+      "from": "person",
+      "to": "agent"
+    }
+  ]
+}

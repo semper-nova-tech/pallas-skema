@@ -41,4 +41,4 @@ Validation, then the Manifest, then the SVG.
 
 Keys: `tab` cycles Nodes then Edges, arrows move the selected Node one Grid
 cell, `enter` or double-click edits it, `a` add, `c` then click connects, `x` delete,
-`+` `-` zoom, `0` fit, `s` force a save, `q` quit.
+`+` `-` zoom, `0` fit, `y` copy image, `T` theme, `s` force a save, `q` quit.

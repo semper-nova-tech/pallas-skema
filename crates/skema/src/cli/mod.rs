@@ -40,9 +40,33 @@ pub fn run_render(manifest_path: &Path, svg_path: &Path) -> Result<(), TextFailu
 
 /// Write a PNG of the Manifest; Validation runs first (wire: runRenderPng).
 pub fn run_render_png(manifest_path: &Path, png_path: &Path) -> Result<(), TextFailure> {
+    run_render_png_with(manifest_path, png_path, &skema_core::current_style())
+}
+
+pub fn run_render_png_with(manifest_path: &Path, png_path: &Path, style: &skema_core::DiagramStyle) -> Result<(), TextFailure> {
     let json = read_manifest_text(manifest_path)?;
     let manifest = parse_manifest(&json)?;
-    skema_core::render_png(&manifest, png_path)
+    skema_core::render_png_with(&manifest, png_path, style)
+}
+
+/// Render SVG in a given style; Validation runs first.
+pub fn run_render_with(manifest_path: &Path, svg_path: &Path, style: &skema_core::DiagramStyle) -> Result<(), TextFailure> {
+    let json = read_manifest_text(manifest_path)?;
+    let manifest = parse_manifest(&json)?;
+    skema_core::render_manifest_with(&manifest, svg_path, style).map(|_| ())
+}
+
+/// `--theme` value to a style: a named theme, or the remembered one when absent.
+pub fn resolve_theme(key: Option<&str>) -> Result<skema_core::DiagramStyle, TextFailure> {
+    match key {
+        None => Ok(skema_core::current_style()),
+        Some(k) => skema_core::Theme::from_key(k)
+            .map(skema_core::resolve_style)
+            .ok_or_else(|| TextFailure {
+                message: format!("unknown theme '{k}': use phosphor, nord, or terminal"),
+                location: None,
+            }),
+    }
 }
 
 /// Build the Editor handoff for the launch paths. A missing Manifest yields a valid empty one.

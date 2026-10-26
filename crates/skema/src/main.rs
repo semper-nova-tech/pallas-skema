@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process;
 
 use clap::{Parser, Subcommand};
-use skema::cli::{format_cli_failure, run_open_editor, run_render, run_validate};
+use skema::cli::{format_cli_failure, run_open_editor, run_validate};
 
 #[derive(Parser)]
 #[command(name = "skema", about = "Pallas Skema v1 — validate, render, and open the terminal Editor")]
@@ -27,6 +27,9 @@ enum Commands {
         /// Also write a PNG of the same Diagram (2 pixels per SVG unit).
         #[arg(long)]
         png: Option<PathBuf>,
+        /// Color theme: phosphor, nord, or terminal. Default: the theme remembered by the Editor.
+        #[arg(long)]
+        theme: Option<String>,
     },
     /// Open the terminal Editor for one Manifest and SVG in this terminal.
     OpenEditor {
@@ -47,10 +50,13 @@ fn main() {
     let cli = Cli::parse();
     let result = match cli.command {
         Commands::Validate { manifest } => run_validate(&manifest),
-        Commands::Render { manifest, svg, png } => run_render(&manifest, &svg)
-            .and_then(|()| match png {
-                Some(png) => skema::cli::run_render_png(&manifest, &png),
-                None => Ok(()),
+        Commands::Render { manifest, svg, png, theme } => skema::cli::resolve_theme(theme.as_deref())
+            .and_then(|style| {
+                skema::cli::run_render_with(&manifest, &svg, &style)?;
+                match png {
+                    Some(png) => skema::cli::run_render_png_with(&manifest, &png, &style),
+                    None => Ok(()),
+                }
             }),
         Commands::OpenEditor {
             manifest,

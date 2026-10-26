@@ -6,7 +6,7 @@ use ratatui::style::Color;
 use skema_core::style::{diagram_style, DiagramStyle};
 use skema_core::{ManifestDocument, Node, NodeSize, NodeType};
 
-use crate::geometry::{facing_port, ranked_ports, route, Port, Rect, Side, Zoom};
+use crate::geometry::{facing_port, port_on, ranked_ports, route, Port, Rect, Side, Zoom};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
@@ -33,19 +33,56 @@ pub struct Palette {
     pub panel: Color,
 }
 
+pub use skema_core::Theme;
+
+/// The shared Skema palette from `style/skema-style.json`.
 pub fn palette() -> Palette {
-    let s: &DiagramStyle = diagram_style();
-    let c = &s.color;
-    Palette {
-        canvas: hex(&c.canvas),
-        node_fill: hex(&c.node_fill),
-        ink: hex(&c.ink),
-        phosphor: hex(&c.phosphor),
-        phosphor_dim: hex(&c.phosphor_dim),
-        dot: hex(&c.dot),
-        line: hex(&c.line),
-        frame: hex(&c.frame),
-        panel: hex(&c.panel),
+    palette_for(Theme::Phosphor)
+}
+
+pub fn palette_for(theme: Theme) -> Palette {
+    match theme {
+        Theme::Phosphor => {
+            let s: &DiagramStyle = diagram_style();
+            let c = &s.color;
+            Palette {
+                canvas: hex(&c.canvas),
+                node_fill: hex(&c.node_fill),
+                ink: hex(&c.ink),
+                phosphor: hex(&c.phosphor),
+                phosphor_dim: hex(&c.phosphor_dim),
+                dot: hex(&c.dot),
+                line: hex(&c.line),
+                frame: hex(&c.frame),
+                panel: hex(&c.panel),
+            }
+        }
+        Theme::Nord => {
+            let c = skema_core::theme::nord_colors();
+            Palette {
+                canvas: hex(&c.canvas),
+                node_fill: hex(&c.node_fill),
+                ink: hex(&c.ink),
+                phosphor: hex(&c.phosphor),
+                phosphor_dim: hex(&c.phosphor_dim),
+                dot: hex(&c.dot),
+                line: hex(&c.line),
+                frame: hex(&c.frame),
+                panel: hex(&c.panel),
+            }
+        }
+        // ANSI slots only, so the terminal's theme supplies every color.
+        Theme::Terminal => Palette {
+            canvas: Color::Reset,
+            node_fill: Color::Reset,
+            ink: Color::Black,
+            phosphor: Color::Cyan,
+            phosphor_dim: Color::DarkGray,
+            dot: Color::DarkGray,
+            line: Color::Reset,
+            frame: Color::DarkGray,
+            panel: Color::Reset,
+        },
     }
 }
 
@@ -145,6 +182,9 @@ pub struct View<'a> {
     pub show_ports: Option<&'a str>,
     /// Rubber band: a dashed line from the connect source toward this surface point.
     pub link_cursor: Option<(i64, i64)>,
+    /// Side the connect started from, when a handle was pressed.
+    pub link_from_side: Option<Side>,
+    pub theme: Theme,
 }
 
 /// Render the Diagram at a zoom level with only a selection (tests and dumps).
@@ -160,9 +200,9 @@ pub fn draw(
 
 /// Render the Diagram at a zoom level.
 pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
-    let View { selected, selected_edge, hover_node, hover_edge, connect_from, ghost, link, show_ports, link_cursor } = *view;
+    let View { selected, selected_edge, hover_node, hover_edge, connect_from, ghost, link, show_ports, link_cursor, link_from_side, theme } = *view;
     let style = diagram_style();
-    let pal = palette();
+    let pal = palette_for(theme);
     let (cols, rows) = zoom.surface_size(&doc.nodes, style.min_columns, style.min_rows);
     let mut s = Surface::new(cols, rows, pal.canvas);
 
@@ -188,7 +228,7 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
         let Some((src, dst)) = ports[i] else { continue };
         let heavy = Some(i) == hover_edge || Some(i) == selected_edge;
         let color = if Some(i) == selected_edge { pal.phosphor } else { pal.line };
-        overlays.extend(draw_edge_lines(&mut s, src, dst, edge.label.as_deref(), color, heavy));
+        overlays.extend(draw_edge_lines(&mut s, src, dst, edge.label.as_deref(), color, heavy, pal.phosphor_dim));
     }
     for overlay in overlays {
         match overlay {
@@ -211,7 +251,10 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
         if let Some(from) = doc.nodes.iter().find(|n| n.id == from_id) {
             let fr = zoom.node_rect(from);
             if !fr.contains(cc, cr) {
-                let src = facing_port(&fr, cc, cr);
+                let src = match link_from_side {
+                    Some(side) => port_on(&fr, side),
+                    None => facing_port(&fr, cc, cr),
+                };
                 let dst_side = match src.side {
                     Side::Left => Side::Right,
                     Side::Right => Side::Left,
@@ -243,8 +286,14 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
             if from_id != to_id {
                 let fr = zoom.node_rect(from);
                 let tr = zoom.node_rect(to);
-                let src = facing_port(&fr, tr.center().0, tr.center().1);
-                let dst = facing_port(&tr, fr.center().0, fr.center().1);
+                let src = match link_from_side {
+                    Some(side) => port_on(&fr, side),
+                    None => facing_port(&fr, tr.center().0, tr.center().1),
+                };
+                let dst = match link_cursor {
+                    Some((c, r)) => port_on(&tr, crate::geometry::nearest_side(&tr, c, r)),
+                    None => facing_port(&tr, fr.center().0, fr.center().1),
+                };
                 for pair in route(src, dst).windows(2) {
                     let (a, b) = (pair[0], pair[1]);
                     if a.1 == b.1 {
@@ -295,9 +344,18 @@ pub fn all_edge_ports(doc: &ManifestDocument, zoom: &Zoom) -> Vec<Option<(Port, 
             let tr = zoom.node_rect(to);
             let (tc, trow) = tr.center();
             let (fc, frow) = fr.center();
-            let src = facing_port(&fr, tc, trow);
-            let ranked = ranked_ports(&tr, fc, frow);
-            let dst = ranked.into_iter().find(|p| !taken.contains(&(ti, p.side))).unwrap_or(ranked[0]);
+            // An explicit side in the Manifest wins; otherwise the facing rule decides.
+            let src = match edge.from_side {
+                Some(side) => port_on(&fr, side.into()),
+                None => facing_port(&fr, tc, trow),
+            };
+            let dst = match edge.to_side {
+                Some(side) => port_on(&tr, side.into()),
+                None => {
+                    let ranked = ranked_ports(&tr, fc, frow);
+                    ranked.into_iter().find(|p| !taken.contains(&(ti, p.side))).unwrap_or(ranked[0])
+                }
+            };
             taken.insert((ti, dst.side));
             Some((src, dst))
         })
@@ -326,7 +384,7 @@ pub fn edge_at(doc: &ManifestDocument, zoom: &Zoom, col: i64, row: i64) -> Optio
     })
 }
 
-fn draw_edge_lines(s: &mut Surface, src: Port, dst: Port, label: Option<&str>, color: Color, heavy: bool) -> Vec<Overlay> {
+fn draw_edge_lines(s: &mut Surface, src: Port, dst: Port, label: Option<&str>, color: Color, heavy: bool, pal_dim: Color) -> Vec<Overlay> {
     let mut overlays = Vec::new();
     let (h, v) = if heavy { ('━', '┃') } else { ('─', '│') };
     let pts = route(src, dst);
@@ -380,7 +438,7 @@ fn draw_edge_lines(s: &mut Surface, src: Port, dst: Port, label: Option<&str>, c
     if let (Some(label), Some((a, b))) = (label, longest) {
         let text = format!(" {label} ");
         let len = text.chars().count() as i64;
-        let label_color = if heavy { color } else { palette().phosphor_dim };
+        let label_color = if heavy { color } else { pal_dim };
         if a.1 == b.1 {
             let mid = (a.0 + b.0) / 2;
             overlays.push(Overlay::Label { col: mid - len / 2, row: a.1, text, color: label_color });
@@ -805,6 +863,24 @@ mod tests {
         assert_eq!(s.get(cursor.0, cursor.1).unwrap().ch, '◌');
         assert_eq!(s.get(r.col + r.w + 5, r.row + 1).unwrap().ch, '┄');
         assert_eq!(s.get(r.col + r.w - 1, r.row + 1).unwrap().ch, '●', "source handle is filled");
+    }
+
+    #[test]
+    fn explicit_edge_sides_are_honored_over_the_facing_rule() {
+        let mut doc = parse_manifest(include_str!("../../../examples/flow.json")).unwrap();
+        doc.edges[0].from_side = Some(skema_core::Side::Bottom);
+        doc.edges[0].to_side = Some(skema_core::Side::Bottom);
+        let ports = all_edge_ports(&doc, &Z);
+        let (src, dst) = ports[0].unwrap();
+        assert_eq!((src.side, dst.side), (Side::Bottom, Side::Bottom));
+    }
+
+    #[test]
+    fn themes_change_the_palette_and_terminal_uses_ansi_slots() {
+        assert_ne!(palette_for(Theme::Nord).canvas, palette_for(Theme::Phosphor).canvas);
+        assert_eq!(palette_for(Theme::Terminal).canvas, Color::Reset);
+        assert_eq!(Theme::from_key("nord"), Some(Theme::Nord));
+        assert_eq!(Theme::Phosphor.next().next().next(), Theme::Phosphor);
     }
 
     #[test]

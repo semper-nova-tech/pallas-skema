@@ -7,7 +7,7 @@ use std::time::SystemTime;
 
 use crate::clipboard;
 use skema_core::{
-    format_text_failure, parse_manifest, render_manifest, serialize_manifest, validate_manifest,
+    format_text_failure, parse_manifest, render_manifest_with, serialize_manifest, validate_manifest,
     Edge, GridPosition, ManifestDocument, Node, NodeSize, NodeType, TextFailure,
 };
 
@@ -138,8 +138,9 @@ pub enum Mode {
     EditEdge { editing: Option<TextInput> },
     /// The selected Node is open for editing: pick a field, then edit it.
     EditNode { field: NodeField, editing: Option<TextInput> },
-    /// A source Node is chosen; the selection now picks the target.
-    Connect { from: String },
+    /// A source Node is chosen; the selection now picks the target. `from_side`
+    /// is set when a connection handle was pressed.
+    Connect { from: String, from_side: Option<crate::geometry::Side> },
 }
 
 /// Clickable panel buttons.
@@ -197,6 +198,10 @@ pub struct App {
     pub link_cursor: Option<(i64, i64)>,
     /// Write the Manifest and SVG after every accepted edit.
     pub autosave: bool,
+    /// Editor color theme, remembered in the user's config directory.
+    pub theme: crate::canvas::Theme,
+    /// The settings section under the buttons is expanded.
+    pub settings_open: bool,
     /// A panel button that was just clicked, shown inverted until the instant passes.
     pub flash: Option<(Button, std::time::Instant)>,
     /// Zoom level index into `geometry::ZOOMS`.
@@ -234,6 +239,8 @@ impl App {
             dragging: false,
             link_cursor: None,
             autosave: true,
+            theme: skema_core::theme::load_theme(),
+            settings_open: false,
             flash: None,
             zoom: crate::geometry::DEFAULT_ZOOM,
             fit_zoom: 0,
@@ -251,7 +258,7 @@ impl App {
             }
             Mode::EditEdge { editing: None } => "⏎ edit label  x delete  esc done".into(),
             Mode::EditNode { editing: None, .. } => "↑↓ pick field  ⏎ edit (size cycles)  esc done".into(),
-            Mode::Connect { from } => format!("connect from '{from}': click the target Node, or tab to it and c  ·  esc cancels"),
+            Mode::Connect { from, .. } => format!("connect from '{from}': click the target Node, or tab to it and c  ·  esc cancels"),
             Mode::Normal if self.manifest.is_none() => "r reload after fixing the file  q quit".into(),
             Mode::Normal if self.focus == Focus::Edges => {
                 "edge: tab next  ⇧tab prev  ⏎ edit  x delete  s save  q quit".into()
@@ -401,11 +408,27 @@ impl App {
             .map(|n| n.id.clone())
     }
 
-    /// Start a connect from a Node, as `c` or a press on one of its connection points does.
-    pub fn start_connect_from(&mut self, id: &str) {
+    /// Start a connect from a Node. A pressed handle fixes the side the Edge leaves by;
+    /// `c` leaves it to the facing rule.
+    pub fn start_connect_from(&mut self, id: &str, from_side: Option<crate::geometry::Side>) {
         self.select_id(id);
-        self.mode = Mode::Connect { from: id.to_owned() };
+        self.mode = Mode::Connect { from: id.to_owned(), from_side };
         self.info("drag or click onto the target Node · esc cancels");
+    }
+
+    /// The handle side of a Node under a surface point, when the point is on one of its handles.
+    pub fn handle_side_at_point(&self, zoom: &crate::geometry::Zoom, id: &str, col: i64, row: i64) -> Option<crate::geometry::Side> {
+        let node = self.manifest.as_ref()?.nodes.iter().find(|n| n.id == id)?;
+        crate::geometry::handles_with_sides(&zoom.node_rect(node))
+            .into_iter()
+            .find(|(cell, _)| *cell == (col, row))
+            .map(|(_, side)| side)
+    }
+
+    /// The side of a Node nearest to a surface point: where a dropped Edge snaps to.
+    pub fn nearest_side_of(&self, zoom: &crate::geometry::Zoom, id: &str, col: i64, row: i64) -> Option<crate::geometry::Side> {
+        let node = self.manifest.as_ref()?.nodes.iter().find(|n| n.id == id)?;
+        Some(crate::geometry::nearest_side(&zoom.node_rect(node), col, row))
     }
 
     pub fn node_id_at_cell(&self, x: i64, y: i64) -> Option<String> {
@@ -413,8 +436,16 @@ impl App {
         doc.nodes.iter().find(|n| n.grid_position.x == x && n.grid_position.y == y).map(|n| n.id.clone())
     }
 
-    /// Finish a mouse connect: an Edge from `from` to `to`, through Validation.
-    pub fn connect_ids(&mut self, from: &str, to: &str) {
+    /// Finish a connect: an Edge from `from` to `to`, through Validation. Sides
+    /// the user chose by pressing a handle or dropping on a side are recorded in
+    /// the Manifest; `None` leaves that end to the renderer's facing rule.
+    pub fn connect_ids(
+        &mut self,
+        from: &str,
+        to: &str,
+        from_side: Option<crate::geometry::Side>,
+        to_side: Option<crate::geometry::Side>,
+    ) {
         if from == to {
             self.fail("✗ an Edge needs two different Nodes · refused");
             return;
@@ -424,7 +455,11 @@ impl App {
             if doc.edges.iter().any(|e| e.from == from && e.to == to) {
                 return Err(format!("Edge {from} → {to} already exists"));
             }
-            doc.edges.push(Edge { from: from.clone(), to: to.clone(), label: None });
+            doc.edges.push(Edge {
+                from_side: from_side.map(Into::into),
+                to_side: to_side.map(Into::into),
+                ..Edge::new(from.clone(), to.clone())
+            });
             Ok(())
         });
         if applied {
@@ -558,17 +593,17 @@ impl App {
 
     pub fn begin_connect(&mut self) {
         match &self.mode {
-            Mode::Connect { from } => {
-                let from = from.clone();
+            Mode::Connect { from, from_side } => {
+                let (from, from_side) = (from.clone(), *from_side);
                 let Some(to) = self.selected.clone() else { return };
                 self.mode = Mode::Normal;
                 self.link_preview = None;
                 self.link_cursor = None;
-                self.connect_ids(&from, &to);
+                self.connect_ids(&from, &to, from_side, None);
             }
             _ => {
                 if let Some(from) = self.selected.clone() {
-                    self.mode = Mode::Connect { from };
+                    self.mode = Mode::Connect { from, from_side: None };
                     self.info("click the target Node, or tab to it and press c");
                 }
             }
@@ -810,7 +845,10 @@ impl App {
             return;
         }
         let json = format!("{}\n", serialize_manifest(doc));
-        if let Err(f) = write_manifest(&self.manifest_path, &json).and_then(|()| render_manifest(doc, &self.svg_path).map(|_| ())) {
+        let style = skema_core::resolve_style(self.theme);
+        if let Err(f) = write_manifest(&self.manifest_path, &json)
+            .and_then(|()| render_manifest_with(doc, &self.svg_path, &style).map(|_| ()))
+        {
             self.fail(format!("✗ {} · not saved", format_text_failure(&f)));
             return;
         }
@@ -852,7 +890,7 @@ impl App {
             }
         }
         let Some(doc) = &self.manifest else { return };
-        let png = match skema_core::render_png_bytes(doc) {
+        let png = match skema_core::render_png_bytes_with(doc, &skema_core::resolve_style(self.theme)) {
             Ok(p) => p,
             Err(f) => {
                 self.fail(format!("✗ {} · nothing copied", format_text_failure(&f)));
@@ -875,7 +913,7 @@ impl App {
         }
         if !self.svg_path.exists() {
             if let Some(doc) = &self.manifest {
-                if let Err(f) = render_manifest(doc, &self.svg_path) {
+                if let Err(f) = render_manifest_with(doc, &self.svg_path, &skema_core::resolve_style(self.theme)) {
                     self.fail(format!("✗ {} · nothing copied", format_text_failure(&f)));
                     return;
                 }
@@ -896,6 +934,46 @@ impl App {
             )),
             Err(e) => self.fail(format!("✗ clipboard: {e}")),
         }
+    }
+
+    // ----- settings ---------------------------------------------------------
+
+    pub fn toggle_settings(&mut self) {
+        self.settings_open = !self.settings_open;
+    }
+
+    /// Switch theme, remember it, and re-render the SVG so the picture on disk matches.
+    pub fn set_theme(&mut self, theme: crate::canvas::Theme) {
+        self.theme = theme;
+        let note = match skema_core::theme::save_theme(theme) {
+            Ok(()) => String::new(),
+            Err(e) => format!(" · not remembered: {e}"),
+        };
+        if theme == crate::canvas::Theme::Terminal && skema_core::theme::load_terminal_palette().is_none() {
+            self.read_terminal_palette();
+        }
+        if let Some(doc) = &self.manifest {
+            if validate_manifest(doc).is_ok() {
+                let _ = render_manifest_with(doc, &self.svg_path, &skema_core::resolve_style(theme));
+            }
+        }
+        self.info(format!("theme: {}{note}", theme.name()));
+    }
+
+    /// Ask the terminal for its colors (OSC 10, 11, and 4) and cache them for exports.
+    pub fn read_terminal_palette(&mut self) {
+        match crate::termcolors::query_palette() {
+            Some(colors) => {
+                if let Err(e) = skema_core::theme::save_terminal_palette(&colors) {
+                    self.fail(format!("terminal palette read but not cached: {e}"));
+                }
+            }
+            None => self.fail("✗ the terminal did not report its colors · exports use Phosphor until it does"),
+        }
+    }
+
+    pub fn cycle_theme(&mut self) {
+        self.set_theme(self.theme.next());
     }
 
     // ----- buttons ----------------------------------------------------------
@@ -1093,7 +1171,7 @@ mod tests {
         app.begin_connect();
         app.select_id("b");
         app.begin_connect();
-        assert_eq!(app.manifest.as_ref().unwrap().edges, vec![Edge { from: "a".into(), to: "b".into(), label: None }]);
+        assert_eq!(app.manifest.as_ref().unwrap().edges, vec![Edge::new("a", "b")]);
 
         app.select_id("a");
         app.begin_connect();
@@ -1125,9 +1203,11 @@ mod tests {
         let from = app.node_id_at_cell(0, 0).unwrap();
         let to = app.node_id_at_cell(1, 0).unwrap();
         assert!(app.node_id_at_cell(5, 5).is_none());
-        app.connect_ids(&from, &to);
-        assert_eq!(app.manifest.as_ref().unwrap().edges, vec![Edge { from: "a".into(), to: "b".into(), label: None }]);
-        app.connect_ids(&from, &from);
+        app.connect_ids(&from, &to, Some(crate::geometry::Side::Right), Some(crate::geometry::Side::Top));
+        let edge = &app.manifest.as_ref().unwrap().edges[0];
+        assert_eq!((edge.from.as_str(), edge.to.as_str()), ("a", "b"));
+        assert_eq!((edge.from_side, edge.to_side), (Some(skema_core::Side::Right), Some(skema_core::Side::Top)), "chosen sides are recorded");
+        app.connect_ids(&from, &from, None, None);
         assert!(app.status.text.contains("two different"));
     }
 
@@ -1232,7 +1312,7 @@ mod tests {
         assert!(String::from_utf8_lossy(&svg_before).contains(r#"aria-label="B""#));
 
         // Force an invalid in-memory Manifest the way a repair session would hold one.
-        app.manifest.as_mut().unwrap().edges.push(Edge { from: "a".into(), to: "ghost".into(), label: None });
+        app.manifest.as_mut().unwrap().edges.push(Edge::new("a", "ghost"));
         app.save();
         assert_eq!(app.lifecycle, Lifecycle::ParseableInvalid);
         assert!(app.status.text.contains("unknown Node id 'ghost'"));
@@ -1264,6 +1344,18 @@ mod tests {
     }
 
     #[test]
+    fn theme_is_remembered_in_the_config_dir() {
+        let dir = temp_dir("theme");
+        std::env::set_var("SKEMA_CONFIG_DIR", &dir);
+        let mut app = open_with(&dir, &two_nodes());
+        app.set_theme(crate::canvas::Theme::Nord);
+        assert_eq!(fs::read_to_string(dir.join("theme")).unwrap().trim(), "nord");
+        let again = open_with(&dir, &two_nodes());
+        assert_eq!(again.theme, crate::canvas::Theme::Nord);
+        std::env::remove_var("SKEMA_CONFIG_DIR");
+    }
+
+    #[test]
     fn quit_saves_first_and_only_an_invalid_manifest_asks_again() {
         let dir = temp_dir("quit");
         let mut app = open_with(&dir, &two_nodes());
@@ -1275,7 +1367,7 @@ mod tests {
         assert_eq!(on_disk.nodes[0].grid_position, GridPosition { x: 0, y: 1 });
 
         let mut app = open_with(&dir, &two_nodes());
-        app.manifest.as_mut().unwrap().edges.push(Edge { from: "a".into(), to: "ghost".into(), label: None });
+        app.manifest.as_mut().unwrap().edges.push(Edge::new("a", "ghost"));
         app.dirty = true;
         app.request_quit();
         assert!(!app.should_quit, "an unsaveable Manifest stays open once");

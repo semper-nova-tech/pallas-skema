@@ -6,5 +6,6 @@ description = "Terminal Editor for Pallas Skema v1: arrange a Diagram on the Gri
 
 [dependencies]
 crossterm = "0.29"
+libc = "0.2"
 ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
 skema-core = { path = "../skema-core" }

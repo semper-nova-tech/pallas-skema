@@ -8,7 +8,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 use ratatui::Frame;
 
 use crate::app::{file_name, App, Button, Focus, Mode, NodeField, StatusKind};
-use crate::canvas::{self, fit, node_overflows, palette, wrap, Palette, Surface};
+use crate::canvas::{self, fit, node_overflows, palette_for, wrap, Palette, Surface, Theme};
 use ratatui::widgets::Clear;
 use crate::geometry::{fit_zoom, ZOOMS};
 use skema_core::style::diagram_style;
@@ -32,12 +32,15 @@ pub struct Hits {
     pub canvas: CanvasView,
     pub add_button: Rect,
     pub copy_button: Rect,
+    pub settings_button: Rect,
+    /// Theme rows in the expanded settings: (row rectangle, theme).
+    pub theme_rows: Vec<(Rect, Theme)>,
     /// Panel rows that select an Edge when clicked: (row rectangle, edge index).
     pub edge_rows: Vec<(Rect, usize)>,
 }
 
 pub fn draw(frame: &mut Frame, app: &mut App) -> Hits {
-    let pal = palette();
+    let pal = palette_for(app.theme);
     let area = frame.area();
     frame.render_widget(Block::default().style(Style::default().bg(pal.panel)), area);
 
@@ -51,9 +54,16 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Hits {
 
     draw_header(frame, header, app, &pal);
     let canvas = draw_canvas(frame, canvas_area, app, &pal);
-    let (copy_button, add_button, edge_rows) = draw_panel(frame, panel_area, app, &pal);
+    let panel = draw_panel(frame, panel_area, app, &pal);
     draw_footer(frame, footer, app, &pal);
-    Hits { canvas, add_button, copy_button, edge_rows }
+    Hits {
+        canvas,
+        add_button: panel.add_button,
+        copy_button: panel.copy_button,
+        settings_button: panel.settings_button,
+        theme_rows: panel.theme_rows,
+        edge_rows: panel.edge_rows,
+    }
 }
 
 fn draw_header(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) {
@@ -108,7 +118,7 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
     let zoom = &ZOOMS[app.zoom];
 
     let connect_from = match &app.mode {
-        Mode::Connect { from } => Some(from.as_str()),
+        Mode::Connect { from, .. } => Some(from.as_str()),
         _ => None,
     };
     let ghost = app.drag_ghost.and_then(|(x, y)| {
@@ -133,6 +143,11 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
             link,
             show_ports: if app.dragging { None } else { app.hover_node.as_deref() },
             link_cursor: app.link_cursor,
+            link_from_side: match &app.mode {
+                Mode::Connect { from_side, .. } => *from_side,
+                _ => None,
+            },
+            theme: app.theme,
         },
     );
 
@@ -238,8 +253,16 @@ impl Widget for SurfaceView<'_> {
     }
 }
 
-/// Draws the tool panel and returns the Add node button's rectangle and the clickable Edge rows.
-fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> (Rect, Rect, Vec<(Rect, usize)>) {
+struct PanelHits {
+    copy_button: Rect,
+    add_button: Rect,
+    settings_button: Rect,
+    theme_rows: Vec<(Rect, Theme)>,
+    edge_rows: Vec<(Rect, usize)>,
+}
+
+/// Draws the tool panel and returns its clickable regions.
+fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelHits {
     let dim = Style::default().fg(pal.phosphor_dim);
     let bright = Style::default().fg(pal.phosphor);
     let filled = Style::default().fg(pal.ink).bg(pal.phosphor).add_modifier(Modifier::BOLD);
@@ -251,7 +274,7 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> (Rect,
     let button = |text: &str| format!("{:^w$}", text, w = width.saturating_sub(2));
     let flashed = Style::default().fg(pal.phosphor).bg(pal.canvas).add_modifier(Modifier::BOLD | Modifier::REVERSED);
     let style_for = |b: Button| if app.flashing(b) { flashed } else { filled };
-    let top = vec![
+    let mut top = vec![
         Line::from(""),
         Line::from(vec![Span::raw(" "), Span::styled(button("⎘ Copy image"), style_for(Button::CopyImage))]),
         Line::from(""),
@@ -260,8 +283,29 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> (Rect,
     ];
     let copy_button = Rect { x: area.x + 1, y: area.y + 1, width: area.width.saturating_sub(2), height: 1 };
     let add_button = Rect { x: area.x + 1, y: area.y + 3, width: area.width.saturating_sub(2), height: 1 };
+
+    // Settings: a collapsed row, or the row plus one line per theme.
+    let chevron = if app.settings_open { "▾" } else { "▸" };
+    top.push(Line::from(vec![
+        Span::raw(" "),
+        Span::styled(format!("{chevron} Settings"), Style::default().fg(pal.phosphor_dim)),
+    ]));
+    let settings_button = Rect { x: area.x + 1, y: area.y + 5, width: area.width.saturating_sub(2), height: 1 };
+    let mut theme_rows: Vec<(Rect, Theme)> = Vec::new();
+    if app.settings_open {
+        top.push(Line::from(Span::styled("   Theme", Style::default().fg(pal.phosphor_dim))));
+        for (i, theme) in Theme::ALL.into_iter().enumerate() {
+            let on = theme == app.theme;
+            let mark = if on { "●" } else { "○" };
+            let style = if on { Style::default().fg(pal.phosphor) } else { Style::default().fg(pal.phosphor_dim) };
+            top.push(Line::from(Span::styled(format!("   {mark} {}", theme.name()), style)));
+            theme_rows.push((Rect { x: area.x + 1, y: area.y + 7 + i as u16, width: area.width.saturating_sub(2), height: 1 }, theme));
+        }
+    }
+    top.push(Line::from(""));
+    let top_len = top.len() as u16;
     frame.render_widget(Paragraph::new(top).style(Style::default().bg(pal.panel)), area);
-    let y = area.y + 5;
+    let y = area.y + top_len;
 
     // Below the buttons the panel stays empty until a Node or Edge is open for
     // editing; then it shows one outlined, titled editor box.
@@ -320,13 +364,13 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> (Rect,
                 edge_rows.push((block_area, app.selected_edge));
             }
         }
-        (Mode::Connect { from }, _) => {
+        (Mode::Connect { from, .. }, _) => {
             let lines = vec![Line::from(Span::styled(fit(&format!(" linking from {from}"), width), bright))];
             frame.render_widget(Paragraph::new(lines), Rect { x: area.x, y, width: area.width, height: 1.min(room) });
         }
         _ => {}
     }
-    (copy_button, add_button, edge_rows)
+    PanelHits { copy_button, add_button, settings_button, theme_rows, edge_rows }
 }
 
 /// Wrap a field value onto up to `max_lines` lines of `width`, keeping the tail
