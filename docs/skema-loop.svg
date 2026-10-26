@@ -3,21 +3,21 @@
 <rect width="896" height="560" fill="#071007"/>
 <rect width="896" height="560" fill="url(#skema-dots)"/>
 <rect x="0.5" y="0.5" width="895" height="559" fill="none" stroke="#365036" stroke-width="1"/>
-<path d="M156 54 L204 54 L204 58 L252 58" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
-<polygon points="252,58 244,54 244,62" fill="#85b286"/>
-<path d="M408 58 L470 58 L470 54 L532 54" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
-<polygon points="532,54 524,50 524,58" fill="#85b286"/>
+<path d="M156 56 L252 56" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="252,56 244,52 244,60" fill="#85b286"/>
+<path d="M408 56 L532 56" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="532,56 524,52 524,60" fill="#85b286"/>
 <path d="M596 80 L596 196" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
 <polygon points="596,196 592,188 600,188" fill="#85b286"/>
-<path d="M532 222 L470 222 L470 226 L408 226" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
-<polygon points="408,226 416,222 416,230" fill="#85b286"/>
+<path d="M532 224 L408 224" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="408,224 416,220 416,228" fill="#85b286"/>
 <path d="M330 196 L330 88" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
 <polygon points="330,88 326,96 334,96" fill="#85b286"/>
 <path d="M330 196 L330 138 L92 138 L92 80" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
 <polygon points="92,80 88,88 96,88" fill="#85b286"/>
-<rect x="207" y="52" width="42" height="13" fill="#071007"/><text x="228" y="58" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">edits</text>
+<rect x="183" y="50" width="42" height="13" fill="#071007"/><text x="204" y="56" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">edits</text>
 <rect x="602" y="132" width="42" height="13" fill="#071007"/><text x="623" y="138" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">valid</text>
-<rect x="415" y="220" width="48" height="13" fill="#071007"/><text x="439" y="226" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">review</text>
+<rect x="446" y="218" width="48" height="13" fill="#071007"/><text x="470" y="224" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">review</text>
 <rect x="336" y="136" width="141" height="13" fill="#071007"/><text x="406" y="142" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">arranges · autosaves</text>
 <g id="node-agent" aria-label="Agent">
 <rect x="28" y="28" width="128" height="52" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>

@@ -103,16 +103,17 @@ fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
         let fr = node_rect(style, from);
         let tr = node_rect(style, to);
         // An explicit side in the Manifest wins; otherwise the facing rule decides.
+        let cell = style.cell;
         let src = match edge.from_side {
-            Some(side) => port_on(fr, side.into()),
-            None => facing_port(fr, rect_center(tr)),
+            Some(side) => port_on(fr, side.into(), cell),
+            None => facing_port(fr, rect_center(tr), cell),
         };
         let dst = match edge.to_side {
-            Some(side) => port_on(tr, side.into()),
-            None => ranked_ports(tr, rect_center(fr))
+            Some(side) => port_on(tr, side.into(), cell),
+            None => ranked_ports(tr, rect_center(fr), cell)
                 .into_iter()
                 .find(|p| !taken.contains(&(to.id.clone(), p.side)))
-                .unwrap_or_else(|| facing_port(tr, rect_center(fr))),
+                .unwrap_or_else(|| facing_port(tr, rect_center(fr), cell)),
         };
         taken.insert((to.id.clone(), dst.side));
         let pts = route(src, dst);
@@ -287,9 +288,17 @@ impl From<crate::manifest::Side> for Side {
     }
 }
 
+/// Left and right ports sit on the Grid row's center line, not the box's own
+/// middle, so Nodes of different heights on one row connect with a straight
+/// line. Top and bottom ports sit at the box's horizontal middle.
+fn side_port_y(y: i64, cell: i64) -> i64 {
+    y + cell / 2
+}
+
 /// The midpoint port on a given side.
-fn port_on((x, y, w, h): PxRect, side: Side) -> Port {
-    let (cx, cy) = (x + w / 2, y + h / 2);
+fn port_on((x, y, w, h): PxRect, side: Side, cell: i64) -> Port {
+    let cx = x + w / 2;
+    let cy = side_port_y(y, cell);
     match side {
         Side::Left => Port { x, y: cy, side },
         Side::Right => Port { x: x + w, y: cy, side },
@@ -301,15 +310,16 @@ fn port_on((x, y, w, h): PxRect, side: Side) -> Port {
 /// The four side-midpoint ports ordered by how squarely each faces a point,
 /// measured in half-box units so a wide box still prefers top or bottom when
 /// the target is above or below.
-fn ranked_ports((x, y, w, h): PxRect, (tx, ty): (i64, i64)) -> [Port; 4] {
+fn ranked_ports((x, y, w, h): PxRect, (tx, ty): (i64, i64), cell: i64) -> [Port; 4] {
     let (cx, cy) = (x + w / 2, y + h / 2);
     let dx = (tx - cx) as f64 / (w as f64 / 2.0).max(1.0);
     let dy = (ty - cy) as f64 / (h as f64 / 2.0).max(1.0);
+    let rect = (x, y, w, h);
     let mut ports = [
-        (dx, Port { x: x + w, y: cy, side: Side::Right }),
-        (-dx, Port { x, y: cy, side: Side::Left }),
-        (dy, Port { x: cx, y: y + h, side: Side::Bottom }),
-        (-dy, Port { x: cx, y, side: Side::Top }),
+        (dx, port_on(rect, Side::Right, cell)),
+        (-dx, port_on(rect, Side::Left, cell)),
+        (dy, port_on(rect, Side::Bottom, cell)),
+        (-dy, port_on(rect, Side::Top, cell)),
     ];
     // Stable sort keeps the Right/Left-before-Bottom/Top tie-break of the facing rule.
     ports.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -317,8 +327,8 @@ fn ranked_ports((x, y, w, h): PxRect, (tx, ty): (i64, i64)) -> [Port; 4] {
 }
 
 /// The port that faces a point best.
-fn facing_port(rect: PxRect, toward: (i64, i64)) -> Port {
-    ranked_ports(rect, toward)[0]
+fn facing_port(rect: PxRect, toward: (i64, i64), cell: i64) -> Port {
+    ranked_ports(rect, toward, cell)[0]
 }
 
 /// Orthogonal polyline from port to port, mirroring the terminal Editor's routing.
@@ -536,9 +546,10 @@ mod tests {
         assert!(svg.contains(&style.font_family));
         assert!(svg.contains("kicks things off"), "description sits inside the box");
         assert!(!svg.contains("process · medium") && !svg.contains("decision · small"), "the type is not drawn");
-        // start (medium at 0,0) → decide (small at 2,0): right port to left port with one jog.
-        assert!(svg.contains(r#"<path d="M156 54 L148 54 L148 50 L140 50""#), "{svg}");
-        assert!(svg.contains("<polygon points=\"140,50 "), "arrowhead at the target port");
+        // start (medium) → decide (small) share a Grid row, so despite different box
+        // heights the Edge is one straight line on the row's center (y = 28 + 56/2).
+        assert!(svg.contains(r#"<path d="M156 56 L140 56""#), "{svg}");
+        assert!(svg.contains("<polygon points=\"140,56 "), "arrowhead at the target port");
         assert!(svg.contains(r#"width="896" height="560""#));
     }
 }

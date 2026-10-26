@@ -3,17 +3,17 @@
 <rect width="896" height="560" fill="#071007"/>
 <rect width="896" height="560" fill="url(#skema-dots)"/>
 <rect x="0.5" y="0.5" width="895" height="559" fill="none" stroke="#365036" stroke-width="1"/>
-<path d="M212 54 L232 54 L232 50 L252 50" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
-<polygon points="252,50 244,46 244,54" fill="#85b286"/>
-<path d="M356 50 L388 50 L388 54 L420 54" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
-<polygon points="420,54 412,50 412,58" fill="#85b286"/>
+<path d="M212 56 L252 56" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="252,56 244,52 244,60" fill="#85b286"/>
+<path d="M356 56 L420 56" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="420,56 412,52 412,60" fill="#85b286"/>
 <path d="M304 72 L304 218 L330 218 L330 364" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
 <polygon points="330,364 326,356 334,356" fill="#85b286"/>
 <path d="M330 364 L330 222 L148 222 L148 80" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
 <polygon points="148,80 144,88 152,88" fill="#85b286"/>
-<path d="M484 80 L484 394 L408 394" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
-<polygon points="408,394 416,390 416,398" fill="#85b286"/>
-<rect x="390" y="48" width="28" height="13" fill="#071007"/><text x="404" y="54" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">yes</text>
+<path d="M484 80 L484 392 L408 392" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="408,392 416,388 416,396" fill="#85b286"/>
+<rect x="374" y="50" width="28" height="13" fill="#071007"/><text x="388" y="56" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">yes</text>
 <rect x="336" y="285" width="22" height="13" fill="#071007"/><text x="347" y="291" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">no</text>
 <g id="node-intake" aria-label="Recieve Rec">
 <rect x="84" y="28" width="128" height="52" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>

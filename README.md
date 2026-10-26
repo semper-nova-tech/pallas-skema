@@ -9,7 +9,7 @@ a terminal Editor, in a Herdr pane beside the agent, and arranges it by hand.
 Both see the same picture, because there is only one source of truth and one
 renderer.
 
-<img width="991" height="616" alt="image" src="https://github.com/user-attachments/assets/40e55c60-cb69-4b5b-a4ab-18bc31933422" />
+![The Skema loop: an agent edits the JSON manifest, skema render validates and draws the picture, a person reviews and arranges it in the terminal Editor, and the file round-trips](docs/skema-loop.png)
 
 - Invalid diagrams never render. Validation names the broken rule and leaves
   the last good picture untouched.
