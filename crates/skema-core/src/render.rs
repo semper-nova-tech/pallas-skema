@@ -2,20 +2,32 @@ use std::fs;
 use std::path::Path;
 
 use crate::manifest::{ManifestDocument, Node, NodeType};
-use crate::style::{diagram_style, node_box, DiagramStyle};
+use crate::style::{node_box, DiagramStyle};
 use crate::svg::SvgOutput;
 use crate::validation::{validate_manifest, TextFailure};
 
-/// SVG markup for a Manifest that passes Validation, without touching disk.
+/// SVG markup for a Manifest that passes Validation, in the remembered theme.
 pub fn render_svg_string(manifest: &ManifestDocument) -> Result<String, TextFailure> {
-    validate_manifest(manifest)?;
-    Ok(build_svg(manifest))
+    render_svg_string_with(manifest, &crate::theme::current_style())
 }
 
-/// Produce SVG from a Manifest that passes Validation (wire: renderManifest).
-pub fn render_manifest(
+/// SVG markup in a given style, without touching disk.
+pub fn render_svg_string_with(manifest: &ManifestDocument, style: &DiagramStyle) -> Result<String, TextFailure> {
+    validate_manifest(manifest)?;
+    Ok(build_svg(manifest, style))
+}
+
+/// Produce SVG from a Manifest that passes Validation, in the remembered theme (wire: renderManifest).
+pub fn render_manifest(manifest: &ManifestDocument, svg_path: &Path) -> Result<SvgOutput, TextFailure> {
+    render_manifest_with(manifest, svg_path, &crate::theme::current_style())
+}
+
+/// Produce SVG in a given style. Validation runs first; a failed Validation leaves
+/// an existing SVG untouched.
+pub fn render_manifest_with(
     manifest: &ManifestDocument,
     svg_path: &Path,
+    style: &DiagramStyle,
 ) -> Result<SvgOutput, TextFailure> {
     validate_manifest(manifest)?;
 
@@ -27,7 +39,7 @@ pub fn render_manifest(
         None
     };
 
-    let svg = build_svg(manifest);
+    let svg = build_svg(manifest, style);
     let bytes = svg.into_bytes();
 
     if let Some(ref old) = prior {
@@ -42,8 +54,7 @@ pub fn render_manifest(
     Ok(SvgOutput { bytes })
 }
 
-fn build_svg(manifest: &ManifestDocument) -> String {
-    let style = diagram_style();
+fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
     let nodes: Vec<&Node> = manifest.nodes.iter().collect();
     let (width, height) = canvas_size(style, &nodes);
     let color = &style.color;
@@ -91,11 +102,18 @@ fn build_svg(manifest: &ManifestDocument) -> String {
         };
         let fr = node_rect(style, from);
         let tr = node_rect(style, to);
-        let src = facing_port(fr, rect_center(tr));
-        let dst = ranked_ports(tr, rect_center(fr))
-            .into_iter()
-            .find(|p| !taken.contains(&(to.id.clone(), p.side)))
-            .unwrap_or_else(|| facing_port(tr, rect_center(fr)));
+        // An explicit side in the Manifest wins; otherwise the facing rule decides.
+        let src = match edge.from_side {
+            Some(side) => port_on(fr, side.into()),
+            None => facing_port(fr, rect_center(tr)),
+        };
+        let dst = match edge.to_side {
+            Some(side) => port_on(tr, side.into()),
+            None => ranked_ports(tr, rect_center(fr))
+                .into_iter()
+                .find(|p| !taken.contains(&(to.id.clone(), p.side)))
+                .unwrap_or_else(|| facing_port(tr, rect_center(fr))),
+        };
         taken.insert((to.id.clone(), dst.side));
         let pts = route(src, dst);
         let d: Vec<String> = pts
@@ -256,6 +274,28 @@ struct Port {
     x: i64,
     y: i64,
     side: Side,
+}
+
+impl From<crate::manifest::Side> for Side {
+    fn from(side: crate::manifest::Side) -> Side {
+        match side {
+            crate::manifest::Side::Left => Side::Left,
+            crate::manifest::Side::Right => Side::Right,
+            crate::manifest::Side::Top => Side::Top,
+            crate::manifest::Side::Bottom => Side::Bottom,
+        }
+    }
+}
+
+/// The midpoint port on a given side.
+fn port_on((x, y, w, h): PxRect, side: Side) -> Port {
+    let (cx, cy) = (x + w / 2, y + h / 2);
+    match side {
+        Side::Left => Port { x, y: cy, side },
+        Side::Right => Port { x: x + w, y: cy, side },
+        Side::Top => Port { x: cx, y, side },
+        Side::Bottom => Port { x: cx, y: y + h, side },
+    }
 }
 
 /// The four side-midpoint ports ordered by how squarely each faces a point,
@@ -470,18 +510,25 @@ mod tests {
                     grid_position: GridPosition { x: 2, y: 0 },
                 },
             ],
-            edges: vec![Edge {
-                from: "start".into(),
-                to: "decide".into(),
-                label: Some("next".into()),
-            }],
+            edges: vec![Edge { label: Some("next".into()), ..Edge::new("start", "decide") }],
         }
     }
 
     #[test]
+    fn explicit_edge_sides_override_the_facing_rule() {
+        let mut doc = sample();
+        doc.edges[0].from_side = Some(crate::manifest::Side::Bottom);
+        doc.edges[0].to_side = Some(crate::manifest::Side::Top);
+        let svg = build_svg(&doc, crate::style::diagram_style());
+        // start bottom (92,80) → decide top (192,28): vertical-vertical with a jog.
+        assert!(svg.contains(r#"<path d="M92 80 L92 54 L192 54 L192 28""#), "{svg}");
+        assert!(svg.contains("<polygon points=\"192,28 "), "arrowhead at the top port");
+    }
+
+    #[test]
     fn svg_uses_shared_editor_style() {
-        let svg = build_svg(&sample());
-        let style = diagram_style();
+        let style = crate::style::diagram_style();
+        let svg = build_svg(&sample(), style);
         assert!(svg.contains(&style.color.canvas));
         assert!(svg.contains(&style.color.phosphor));
         assert!(svg.contains(&style.color.node_fill));

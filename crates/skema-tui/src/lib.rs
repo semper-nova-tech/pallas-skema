@@ -4,6 +4,7 @@ pub mod app;
 pub mod canvas;
 pub mod clipboard;
 pub mod geometry;
+pub mod termcolors;
 pub mod ui;
 
 use std::io::stdout;
@@ -27,8 +28,16 @@ use canvas::edge_at;
 pub fn run(manifest_path: &Path, svg_path: &Path, autosave: bool) -> Result<(), TextFailure> {
     let mut app = App::open(manifest_path, svg_path);
     app.autosave = autosave;
+    if app.theme == skema_core::Theme::Terminal {
+        // Refresh the cached terminal colors on every launch; the terminal theme may have changed.
+        app.read_terminal_palette();
+    }
     let mut terminal = ratatui::init();
     let _ = execute!(stdout(), EnableMouseCapture);
+    // Swallow any late terminal replies before the first real keystroke.
+    while event::poll(Duration::from_millis(40)).unwrap_or(false) {
+        let _ = event::read();
+    }
     let outcome = event_loop(&mut terminal, &mut app);
     let _ = execute!(stdout(), DisableMouseCapture);
     ratatui::restore();
@@ -67,6 +76,15 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                 MouseEventKind::Down(MouseButton::Left) if in_rect(hits.add_button, mouse.column, mouse.row) => {
                     app.press(Button::AddNode);
                 }
+                MouseEventKind::Down(MouseButton::Left) if in_rect(hits.settings_button, mouse.column, mouse.row) => {
+                    app.toggle_settings();
+                }
+                MouseEventKind::Down(MouseButton::Left)
+                    if hits.theme_rows.iter().any(|(r, _)| in_rect(*r, mouse.column, mouse.row)) =>
+                {
+                    let theme = hits.theme_rows.iter().find(|(r, _)| in_rect(*r, mouse.column, mouse.row)).map(|(_, t)| *t).unwrap();
+                    app.set_theme(theme);
+                }
                 // Panel: clicking an Edge row picks it; a second click opens the editor.
                 MouseEventKind::Down(MouseButton::Left)
                     if hits.edge_rows.iter().any(|(r, _)| in_rect(*r, mouse.column, mouse.row)) =>
@@ -98,7 +116,8 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                     // A press on a connection handle starts a connect from that Node.
                     if !matches!(app.mode, Mode::Connect { .. } | Mode::EditNode { .. } | Mode::EditEdge { .. }) {
                         if let Some(from) = point.and_then(|(c, r)| app.port_at_point(zoom, c, r)) {
-                            app.start_connect_from(&from);
+                            let side = point.and_then(|(c, r)| app.handle_side_at_point(zoom, &from, c, r));
+                            app.start_connect_from(&from, side);
                             app.link_cursor = point;
                             port_drag = true;
                             continue;
@@ -122,12 +141,14 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                     }
                     match (&app.mode, hit) {
                         // `c` then click: the clicked Node is the target.
-                        (Mode::Connect { from }, Some(to)) => {
-                            let from = from.clone();
+                        (Mode::Connect { from, from_side }, Some(to)) => {
+                            let (from, from_side) = (from.clone(), *from_side);
+                            let to_side = point.and_then(|(c, r)| app.nearest_side_of(zoom, &to, c, r));
                             app.link_preview = None;
+                            app.link_cursor = None;
                             app.mode = Mode::Normal;
                             app.select_id(&to);
-                            app.connect_ids(&from, &to);
+                            app.connect_ids(&from, &to, from_side, to_side);
                         }
                         (Mode::Connect { .. }, None) => app.status_hint("no Node there · click a Node or esc"),
                         (_, Some(id)) => {
@@ -177,7 +198,7 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                     if app.hover_edge.is_none() {
                         app.hover_edge = hits.edge_rows.iter().find(|(r, _)| in_rect(*r, mouse.column, mouse.row)).map(|(_, i)| *i);
                     }
-                    if let Mode::Connect { from } = &app.mode {
+                    if let Mode::Connect { from, .. } = &app.mode {
                         let from = from.clone();
                         let over = node.clone().filter(|id| *id != from);
                         app.link_preview = Some((from, over));
@@ -206,14 +227,14 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                         let over = surface_point(&view, mouse.column, mouse.row)
                             .and_then(|(c, r)| app.node_at_point(&ZOOMS[app.zoom], c, r));
                         match over {
-                            Some(to) if to != from => app.connect_ids(&from, &to),
+                            Some(to) if to != from => app.connect_ids(&from, &to, None, None),
                             _ => {}
                         }
                     }
                 }
                 MouseEventKind::Drag(MouseButton::Left) if port_drag => {
                     // Dragging out of a connection point: rubber band follows, target previews.
-                    if let Mode::Connect { from } = &app.mode {
+                    if let Mode::Connect { from, .. } = &app.mode {
                         let from = from.clone();
                         let point = surface_point(&view, mouse.column, mouse.row);
                         let over = point
@@ -239,15 +260,16 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                     // connect stays live for a click on the target.
                     if port_drag {
                         port_drag = false;
-                        if let Mode::Connect { from } = app.mode.clone() {
-                            let over = surface_point(&view, mouse.column, mouse.row)
-                                .and_then(|(c, r)| app.node_at_point(&ZOOMS[app.zoom], c, r));
+                        if let Mode::Connect { from, from_side } = app.mode.clone() {
+                            let point = surface_point(&view, mouse.column, mouse.row);
+                            let over = point.and_then(|(c, r)| app.node_at_point(&ZOOMS[app.zoom], c, r));
                             if let Some(to) = over.filter(|to| *to != from) {
+                                let to_side = point.and_then(|(c, r)| app.nearest_side_of(&ZOOMS[app.zoom], &to, c, r));
                                 app.mode = Mode::Normal;
                                 app.link_preview = None;
                                 app.link_cursor = None;
                                 app.select_id(&to);
-                                app.connect_ids(&from, &to);
+                                app.connect_ids(&from, &to, from_side, to_side);
                             }
                         }
                     }
@@ -367,6 +389,7 @@ fn handle_key(app: &mut App, code: KeyCode, mods: KeyModifiers) {
         KeyCode::Char('-') | KeyCode::Char('_') => app.zoom_out(),
         KeyCode::Char('0') => app.zoom_fit(),
         KeyCode::Char('y') => app.copy_png(),
+        KeyCode::Char('T') => app.cycle_theme(),
         KeyCode::Char('Y') => app.copy_svg(),
         KeyCode::Up | KeyCode::Char('k') => app.move_selected(0, -1),
         KeyCode::Down | KeyCode::Char('j') => app.move_selected(0, 1),

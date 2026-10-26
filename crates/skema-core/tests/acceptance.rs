@@ -131,11 +131,7 @@ fn ac_preserve_svg() {
 
     let invalid = ManifestDocument {
         nodes: good.nodes.clone(),
-        edges: vec![skema_core::Edge {
-            from: "start".into(),
-            to: "ghost".into(),
-            label: None,
-        }],
+        edges: vec![skema_core::Edge::new("start", "ghost")],
     };
     let err = render_manifest(&invalid, &path);
     assert!(err.is_err());

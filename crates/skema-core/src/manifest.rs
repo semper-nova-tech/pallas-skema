@@ -32,6 +32,28 @@ pub struct Edge {
     pub to: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// Side of `from` the Edge leaves by. Absent means the renderer picks the facing side.
+    #[serde(default, rename = "fromSide", skip_serializing_if = "Option::is_none")]
+    pub from_side: Option<Side>,
+    /// Side of `to` the Edge enters by. Absent means the renderer picks the facing side.
+    #[serde(default, rename = "toSide", skip_serializing_if = "Option::is_none")]
+    pub to_side: Option<Side>,
+}
+
+impl Edge {
+    pub fn new(from: impl Into<String>, to: impl Into<String>) -> Edge {
+        Edge { from: from.into(), to: to.into(), label: None, from_side: None, to_side: None }
+    }
+}
+
+/// A side of a Node box, where an Edge may attach at the midpoint (wire field: fromSide, toSide).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    Left,
+    Right,
+    Top,
+    Bottom,
 }
 
 /// Node kind (wire field: type).

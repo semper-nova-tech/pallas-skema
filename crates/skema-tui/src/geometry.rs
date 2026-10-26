@@ -126,17 +126,68 @@ pub fn fit_zoom(nodes: &[Node], min_columns: i64, min_rows: i64, width: i64, hei
         .unwrap_or(0)
 }
 
-/// Connection handles drawn on the box border at the middle of each side. A
-/// one-row box has only its left and right ends.
-pub fn handles(rect: &Rect) -> Vec<(i64, i64)> {
+/// Connection handles drawn on the box border at the middle of each side, with
+/// the side each one stands for. A one-row box has only its left and right ends.
+pub fn handles_with_sides(rect: &Rect) -> Vec<((i64, i64), Side)> {
     let mid_row = rect.row + rect.h / 2;
     let mid_col = rect.col + rect.w / 2;
-    let mut out = vec![(rect.col, mid_row), (rect.col + rect.w - 1, mid_row)];
+    let mut out = vec![((rect.col, mid_row), Side::Left), ((rect.col + rect.w - 1, mid_row), Side::Right)];
     if rect.h >= 3 {
-        out.push((mid_col, rect.row));
-        out.push((mid_col, rect.row + rect.h - 1));
+        out.push(((mid_col, rect.row), Side::Top));
+        out.push(((mid_col, rect.row + rect.h - 1), Side::Bottom));
     }
     out
+}
+
+pub fn handles(rect: &Rect) -> Vec<(i64, i64)> {
+    handles_with_sides(rect).into_iter().map(|(cell, _)| cell).collect()
+}
+
+/// The handle side nearest to a point, in half-box units like `ranked_ports`.
+pub fn nearest_side(rect: &Rect, col: i64, row: i64) -> Side {
+    let (cc, cr) = rect.center();
+    let dx = (col - cc) as f64 / (rect.w as f64 / 2.0).max(1.0);
+    let dy = (row - cr) as f64 / (rect.h as f64 / 2.0).max(1.0);
+    if dx.abs() >= dy.abs() {
+        if dx >= 0.0 { Side::Right } else { Side::Left }
+    } else if dy >= 0.0 {
+        Side::Bottom
+    } else {
+        Side::Top
+    }
+}
+
+/// The midpoint port on a given side.
+pub fn port_on(rect: &Rect, side: Side) -> Port {
+    let [left, right, top, bottom] = ports(rect);
+    match side {
+        Side::Left => left,
+        Side::Right => right,
+        Side::Top => top,
+        Side::Bottom => bottom,
+    }
+}
+
+impl From<skema_core::Side> for Side {
+    fn from(s: skema_core::Side) -> Side {
+        match s {
+            skema_core::Side::Left => Side::Left,
+            skema_core::Side::Right => Side::Right,
+            skema_core::Side::Top => Side::Top,
+            skema_core::Side::Bottom => Side::Bottom,
+        }
+    }
+}
+
+impl From<Side> for skema_core::Side {
+    fn from(s: Side) -> skema_core::Side {
+        match s {
+            Side::Left => skema_core::Side::Left,
+            Side::Right => skema_core::Side::Right,
+            Side::Top => skema_core::Side::Top,
+            Side::Bottom => skema_core::Side::Bottom,
+        }
+    }
 }
 
 /// The four side-midpoint ports of a Node box.

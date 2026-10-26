@@ -8,21 +8,32 @@ use resvg::tiny_skia;
 use resvg::usvg;
 
 use crate::manifest::ManifestDocument;
-use crate::render::render_svg_string;
+use crate::render::render_svg_string_with;
+use crate::style::DiagramStyle;
 use crate::validation::{text_failure, TextFailure};
 
 /// Pixels per SVG unit. 2 keeps text crisp on high-density displays.
 pub const PNG_SCALE: f32 = 2.0;
 
-/// Render a Manifest straight to PNG bytes (Validation runs first).
+/// Render a Manifest straight to PNG bytes in the remembered theme (Validation runs first).
 pub fn render_png_bytes(manifest: &ManifestDocument) -> Result<Vec<u8>, TextFailure> {
-    let svg = render_svg_string(manifest)?;
+    render_png_bytes_with(manifest, &crate::theme::current_style())
+}
+
+/// Render a Manifest to PNG bytes in a given style.
+pub fn render_png_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) -> Result<Vec<u8>, TextFailure> {
+    let svg = render_svg_string_with(manifest, style)?;
     svg_to_png(svg.as_bytes(), PNG_SCALE)
 }
 
-/// Render a Manifest to a PNG file (Validation runs first).
+/// Render a Manifest to a PNG file in the remembered theme (Validation runs first).
 pub fn render_png(manifest: &ManifestDocument, png_path: &Path) -> Result<(), TextFailure> {
-    let bytes = render_png_bytes(manifest)?;
+    render_png_with(manifest, png_path, &crate::theme::current_style())
+}
+
+/// Render a Manifest to a PNG file in a given style.
+pub fn render_png_with(manifest: &ManifestDocument, png_path: &Path, style: &DiagramStyle) -> Result<(), TextFailure> {
+    let bytes = render_png_bytes_with(manifest, style)?;
     std::fs::write(png_path, bytes).map_err(|e| text_failure(format!("cannot write PNG: {e}"), None))
 }
 
@@ -58,8 +69,10 @@ mod tests {
     #[test]
     fn png_has_the_svg_size_times_scale_and_is_deterministic() {
         let doc = parse_manifest(include_str!("../tests/fixtures/golden-manifest.json")).unwrap();
-        let a = render_png_bytes(&doc).unwrap();
-        let b = render_png_bytes(&doc).unwrap();
+        // Pin the style: other tests in this binary switch the remembered theme.
+        let style = crate::style::diagram_style();
+        let a = render_png_bytes_with(&doc, style).unwrap();
+        let b = render_png_bytes_with(&doc, style).unwrap();
         assert_eq!(a, b, "same Manifest, same PNG");
         assert_eq!(&a[..8], b"\x89PNG\r\n\x1a\n");
         // IHDR width/height are big-endian u32 at offsets 16 and 20.

@@ -33,7 +33,8 @@ then use `target/release/skema`. Do not continue without the binary.
       "type": "process", "size": "medium", "gridPosition": { "x": 0, "y": 0 } }
   ],
   "edges": [
-    { "from": "intake", "to": "review", "label": "optional" }
+    { "from": "intake", "to": "review", "label": "optional",
+      "fromSide": "right", "toSide": "left" }
   ]
 }
 ```
@@ -47,7 +48,10 @@ Rules the validator enforces. Design to them instead of discovering them by fail
 - `gridPosition` is whole non-negative Grid cells. No pixels, no fractions.
 - One Node per cell. Leave at least two empty cells between Nodes side by side
   and two rows between Nodes stacked, so boxes and edge labels have room.
-- Every Edge endpoint names an existing Node id.
+- Every Edge endpoint names an existing Node id. `fromSide` and `toSide`
+  (`left`, `right`, `top`, `bottom`) are optional; leave them out and the
+  renderer picks the side that faces the other Node. Set them only when a
+  specific side matters, or keep ones a person set in the Editor.
 
 ## Loop
 
@@ -68,6 +72,9 @@ Rules the validator enforces. Design to them instead of discovering them by fail
 
 `skema validate --manifest <path>.json` checks without writing anything. Add
 `--png <path>.png` to `render` when the user wants a picture to paste or attach.
+Renders use the theme the person chose in the Editor (kept in
+`~/.config/skema/theme`), so do not pass `--theme` unless they ask for a
+specific one.
 
 ## Open the Editor pane
 

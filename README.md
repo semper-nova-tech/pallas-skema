@@ -97,7 +97,8 @@ skema render --manifest flow.json --svg flow.svg --png flow.png   # also a PNG
 
 `skema validate --manifest flow.json` checks without writing anything. The PNG
 is rasterized from the same SVG with the same embedded font, at 2 pixels per
-SVG unit.
+SVG unit. `--theme phosphor|nord|terminal` overrides the remembered theme for
+one render.
 
 ## Editor (terminal)
 
@@ -112,7 +113,10 @@ skema open-editor --manifest flow.json --svg flow.svg
 - Nodes sit on Grid cells. Arrows move the selected Node one whole cell at a
   time, or drag it with the mouse. A move that would overlap another Node or
   leave the Grid is refused with the Validation text.
-- Edges leave and enter at the middle of the facing side of each Node.
+- Edges leave and enter at the middle of a side of each Node. Dragging from a
+  connection handle fixes the side it leaves by, and the side you drop on is
+  where it enters; those sides are saved in the Manifest. Edges made without a
+  handle use the side that faces the other Node.
 - Every Node shares one color and the type is not drawn; decisions have rounded
   corners. The selected Node is drawn filled; others are outlined. A Node has a
   `label` and an optional `description`.
@@ -123,6 +127,14 @@ skema open-editor --manifest flow.json --svg flow.svg
   the files on disk are always valid. `s` forces a save. Pass `--manual-save`
   to write only on `s`. `q` saves before quitting; only a Diagram that fails
   Validation stays open, and a second `q` discards it.
+- Settings, under the buttons, picks the theme: Phosphor (the original green),
+  Nord, or Match terminal, which uses the terminal's own ANSI colors so
+  Ghostty's theme shows through. `T` cycles. The choice is kept in
+  `~/.config/skema/theme`, and the SVG and PNG follow it: the Editor
+  re-renders on a switch, Copy image uses it, and `skema render` reads the
+  same setting so an agent's render matches. For Match terminal the Editor
+  asks the terminal for its real colors (OSC 10, 11, and 4) and caches them in
+  `~/.config/skema/terminal-palette.json` for those exports.
 - The Copy image button, or `y`, puts a PNG of the Diagram on the system
   clipboard as a picture, ready to paste into chat or a document (AppleScript
   on macOS, `wl-copy` or `xclip` on Linux). `Y` copies the SVG markup as text.

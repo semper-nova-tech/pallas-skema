@@ -2,11 +2,11 @@
 
 use std::sync::OnceLock;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::manifest::NodeSize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiagramStyle {
     pub font_family: String,
@@ -32,20 +32,20 @@ pub struct DiagramStyle {
     pub color: StyleColor,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct StyleNodes {
     pub small: StyleBox,
     pub medium: StyleBox,
     pub large: StyleBox,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct StyleBox {
     pub width: i64,
     pub height: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StyleColor {
     /// Page background. Read by the Editor; Render paints `canvas` instead.
@@ -68,6 +68,11 @@ const STYLE_JSON: &str = include_str!("../../../style/skema-style.json");
 pub fn diagram_style() -> &'static DiagramStyle {
     static STYLE: OnceLock<DiagramStyle> = OnceLock::new();
     STYLE.get_or_init(|| serde_json::from_str(STYLE_JSON).expect("style/skema-style.json"))
+}
+
+/// The shared geometry and typography with another palette.
+pub fn styled(color: StyleColor) -> DiagramStyle {
+    DiagramStyle { color, ..diagram_style().clone() }
 }
 
 pub fn node_box(style: &DiagramStyle, size: NodeSize) -> (i64, i64) {
