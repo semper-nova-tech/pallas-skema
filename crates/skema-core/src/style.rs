@@ -75,6 +75,31 @@ pub fn styled(color: StyleColor) -> DiagramStyle {
     DiagramStyle { color, ..diagram_style().clone() }
 }
 
+/// Grid cells a Node covers, (columns, rows): its box size rounded to whole cells.
+/// The box is centered on that span, so it sits the same distance from the dots
+/// on opposite sides; a box a little wider than its span overhangs both evenly.
+pub fn node_span(style: &DiagramStyle, size: NodeSize) -> (i64, i64) {
+    let (w, h) = node_box(style, size);
+    let round = |px: i64| ((px + style.cell / 2) / style.cell).max(1);
+    (round(w), round(h))
+}
+
+/// A Node's box in SVG pixels, (x, y, width, height). Dots sit at `pad + k * cell`;
+/// the box is centered between the dots of the cells it covers.
+pub fn node_rect(style: &DiagramStyle, node: &crate::manifest::Node) -> (i64, i64, i64, i64) {
+    let (w, h) = node_box(style, node.size);
+    let (sw, sh) = node_span(style, node.size);
+    let x = style.pad + node.grid_position.x * style.cell + (sw * style.cell - w) / 2;
+    let y = style.pad + node.grid_position.y * style.cell + (sh * style.cell - h) / 2;
+    (x, y, w, h)
+}
+
+/// Dot columns and rows a Node needs: its span plus the dot that closes it.
+pub fn node_extent(style: &DiagramStyle, node: &crate::manifest::Node) -> (i64, i64) {
+    let (sw, sh) = node_span(style, node.size);
+    (node.grid_position.x + sw + 1, node.grid_position.y + sh + 1)
+}
+
 pub fn node_box(style: &DiagramStyle, size: NodeSize) -> (i64, i64) {
     let node = match size {
         NodeSize::Small => &style.nodes.small,

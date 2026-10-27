@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::grid::GridPosition;
 use crate::manifest::{CanvasSize, ManifestDocument, NodeSize, NodeType};
-use crate::style::{diagram_style, node_box};
+use crate::style::{diagram_style, node_extent};
 
 /// Validation or parse failure message (wire: textFailure).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,8 +97,8 @@ fn validate_grid_position(pos: &GridPosition, node_id: &str) -> Result<(), TextF
     Ok(())
 }
 
-/// A fixed canvas must hold every Node box, measured like Render: padding on
-/// both sides of the box plus the box itself.
+/// A fixed canvas must hold every Node: the cells it covers and the dot that
+/// closes them, the same measure Render grows the canvas by.
 fn validate_canvas(manifest: &ManifestDocument, canvas: CanvasSize) -> Result<(), TextFailure> {
     if canvas.columns < 1 || canvas.rows < 1 {
         return Err(text_failure(
@@ -108,10 +108,8 @@ fn validate_canvas(manifest: &ManifestDocument, canvas: CanvasSize) -> Result<()
     }
     let style = diagram_style();
     for node in &manifest.nodes {
-        let (w, h) = node_box(style, node.size);
-        let right = style.pad + node.grid_position.x * style.cell + w + style.pad;
-        let bottom = style.pad + node.grid_position.y * style.cell + h + style.pad;
-        if right > canvas.columns * style.cell || bottom > canvas.rows * style.cell {
+        let (columns, rows) = node_extent(style, node);
+        if columns > canvas.columns || rows > canvas.rows {
             return Err(text_failure(
                 format!("Node '{}' does not fit a {}×{} canvas", node.id, canvas.columns, canvas.rows),
                 Some(format!("nodes/id={}", node.id)),
@@ -163,19 +161,19 @@ mod tests {
     #[test]
     fn a_fixed_canvas_must_hold_every_node_box() {
         let canvas = |columns, rows| Some(CanvasSize { columns, rows });
-        // Medium is 128 x 52 px: at x = 13, 28 + 728 + 128 + 28 = 912 > 896;
-        // at y = 9, 28 + 504 + 52 + 28 = 612 > 560. A Large box (60 high) at y = 8 needs 564.
-        let mut manifest = ManifestDocument { canvas: canvas(16, 10), nodes: vec![node("a", 12, 8)], edges: vec![] };
+        // A Node needs its cells plus the closing dot: Medium covers 2 x 1 cells,
+        // so on 16 x 10 it fits up to x = 13 and y = 8.
+        let mut manifest = ManifestDocument { canvas: canvas(16, 10), nodes: vec![node("a", 13, 8)], edges: vec![] };
         assert!(validate_manifest(&manifest).is_ok());
-        manifest.nodes[0].grid_position.x = 13;
+        manifest.nodes[0].grid_position.x = 14;
         let err = validate_manifest(&manifest).unwrap_err();
         assert!(err.message.contains("'a' does not fit a 16×10 canvas"), "{}", err.message);
         assert_eq!(err.location.as_deref(), Some("nodes/id=a"));
         manifest.nodes[0].grid_position = GridPosition { x: 0, y: 9 };
         assert!(validate_manifest(&manifest).is_err(), "row bound");
-        manifest.nodes[0].grid_position = GridPosition { x: 0, y: 8 };
+        manifest.nodes[0].grid_position = GridPosition { x: 13, y: 0 };
         manifest.nodes[0].size = NodeSize::Large;
-        assert!(validate_manifest(&manifest).is_err(), "a Large box overhangs its cell");
+        assert!(validate_manifest(&manifest).is_err(), "a Large box covers 3 cells");
         manifest.canvas = canvas(0, 10);
         assert!(validate_manifest(&manifest).is_err());
     }

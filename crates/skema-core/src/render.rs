@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::manifest::{ManifestDocument, Node, NodeType};
-use crate::style::{node_box, DiagramStyle};
+use crate::style::{node_extent, DiagramStyle};
 use crate::svg::SvgOutput;
 use crate::validation::{validate_manifest, TextFailure};
 
@@ -116,21 +116,34 @@ fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
                 .unwrap_or_else(|| facing_port(tr, rect_center(fr), cell)),
         };
         taken.insert((to.id.clone(), dst.side));
-        let pts = route(src, dst, cell / 2);
+        // A bracket beside a box that overhangs the outer dots could leave the canvas; keep it on.
+        let pts: Vec<(i64, i64)> =
+            route(src, dst, cell / 2).into_iter().map(|(x, y)| (x.clamp(1, width - 1), y.clamp(1, height - 1))).collect();
         let d: Vec<String> = pts
             .iter()
             .enumerate()
             .map(|(i, (x, y))| format!("{}{x} {y}", if i == 0 { "M" } else { "L" }))
             .collect();
+        // Hover tooltip: the full Edge, on a wide invisible stroke so the thin line is easy to hit.
+        let from_label = from.label.as_str();
+        let to_label = to.label.as_str();
+        let tip = match edge.label.as_deref() {
+            Some(label) => format!("{from_label} → {to_label}: {label}"),
+            None => format!("{from_label} → {to_label}"),
+        };
+        out.push_str(&format!("<g><title>{}</title>", escape_xml(&tip)));
         out.push_str(&format!(
             r#"<path d="{}" fill="none" stroke="{}" stroke-width="{}" stroke-linejoin="round"/>"#,
             d.join(" "),
             color.line,
             style.edge_width,
         ));
-        out.push('\n');
+        out.push_str(&format!(
+            r#"<path d="{}" fill="none" stroke="transparent" stroke-width="12"/>"#,
+            d.join(" "),
+        ));
         out.push_str(&arrowhead(dst, color.line.as_str(), style.edge_head));
-        out.push('\n');
+        out.push_str("</g>\n");
         if let Some(label) = &edge.label {
             let (a, b) = longest_segment(&pts);
             let (lx, ly) = ((a.0 + b.0) / 2, (a.1 + b.1) / 2);
@@ -170,6 +183,12 @@ fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
             escape_xml(&node.id),
             escape_xml(&node.label),
         ));
+        // Hover tooltip: the full label and description, which the box may cut short.
+        let tip = match node.description.as_deref().filter(|d| !d.is_empty()) {
+            Some(desc) => format!("{}\n{desc}", node.label),
+            None => node.label.clone(),
+        };
+        out.push_str(&format!("<title>{}</title>", escape_xml(&tip)));
         out.push('\n');
         out.push_str(&format!(
             r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{}" stroke="{stroke}" stroke-width="{}"/>"#,
@@ -228,35 +247,20 @@ fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
 }
 
 fn canvas_size(style: &DiagramStyle, nodes: &[&Node], bounds: (i64, i64)) -> (i64, i64) {
-    let (columns, rows) = bounds;
-    let min_w = columns * style.cell;
-    let min_h = rows * style.cell;
-    let content_w = nodes
-        .iter()
-        .map(|node| {
-            let (w, _) = node_box(style, node.size);
-            style.pad + node.grid_position.x * style.cell + w + style.pad
-        })
-        .max()
-        .unwrap_or(0);
-    let content_h = nodes
-        .iter()
-        .map(|node| {
-            let (_, h) = node_box(style, node.size);
-            style.pad + node.grid_position.y * style.cell + h + style.pad
-        })
-        .max()
-        .unwrap_or(0);
-    (min_w.max(content_w), min_h.max(content_h))
+    // Whole cells only, so the dots keep an even margin on every side.
+    let (mut columns, mut rows) = bounds;
+    for node in nodes {
+        let (c, r) = node_extent(style, node);
+        columns = columns.max(c);
+        rows = rows.max(r);
+    }
+    (columns * style.cell, rows * style.cell)
 }
 
 type PxRect = (i64, i64, i64, i64);
 
 fn node_rect(style: &DiagramStyle, node: &Node) -> PxRect {
-    let (w, h) = node_box(style, node.size);
-    let x = style.pad + node.grid_position.x * style.cell;
-    let y = style.pad + node.grid_position.y * style.cell;
-    (x, y, w, h)
+    crate::style::node_rect(style, node)
 }
 
 fn rect_center((x, y, w, h): PxRect) -> (i64, i64) {
@@ -289,17 +293,12 @@ impl From<crate::manifest::Side> for Side {
     }
 }
 
-/// Left and right ports sit on the Grid row's center line, not the box's own
-/// middle, so Nodes of different heights on one row connect with a straight
-/// line. Top and bottom ports sit at the box's horizontal middle.
-fn side_port_y(y: i64, cell: i64) -> i64 {
-    y + cell / 2
-}
-
-/// The midpoint port on a given side.
-fn port_on((x, y, w, h): PxRect, side: Side, cell: i64) -> Port {
+/// The midpoint port on a given side. Boxes are centered on their cells, so a
+/// box's middle is its Grid row's center line and Nodes of different heights on
+/// one row connect with a straight line.
+fn port_on((x, y, w, h): PxRect, side: Side, _cell: i64) -> Port {
     let cx = x + w / 2;
-    let cy = side_port_y(y, cell);
+    let cy = y + h / 2;
     match side {
         Side::Left => Port { x, y: cy, side },
         Side::Right => Port { x: x + w, y: cy, side },
@@ -550,9 +549,39 @@ mod tests {
         doc.edges[0].from_side = Some(crate::manifest::Side::Bottom);
         doc.edges[0].to_side = Some(crate::manifest::Side::Top);
         let svg = build_svg(&doc, crate::style::diagram_style());
-        // start bottom (92,80) → decide top (192,28): vertical-vertical with a jog.
-        assert!(svg.contains(r#"<path d="M92 80 L92 54 L192 54 L192 28""#), "{svg}");
-        assert!(svg.contains("<polygon points=\"192,28 "), "arrowhead at the top port");
+        // start bottom (84,82) → decide top (196,34): vertical-vertical with a jog.
+        assert!(svg.contains(r#"<path d="M84 82 L84 58 L196 58 L196 34""#), "{svg}");
+        assert!(svg.contains("<polygon points=\"196,34 "), "arrowhead at the top port");
+    }
+
+    #[test]
+    fn nodes_and_edges_carry_full_text_tooltips() {
+        let mut doc = sample();
+        doc.nodes[0].description = Some("a description far too long to fit inside one medium box".into());
+        let svg = build_svg(&doc, crate::style::diagram_style());
+        assert!(svg.contains("<title>Start process\na description far too long to fit inside one medium box</title>"), "{svg}");
+        assert!(svg.contains("<title>Choose path</title>"));
+        assert!(svg.contains("<g><title>Start process → Choose path: next</title><path"));
+    }
+
+    #[test]
+    fn dots_and_boxes_are_centered_on_the_grid() {
+        let style = crate::style::diagram_style();
+        let svg = build_svg(&sample(), style);
+        // Dots at pad + k * cell: the first and last sit `pad` in from each edge.
+        assert_eq!(style.dot_offset + style.cell / 2, style.pad);
+        assert_eq!(style.min_columns * style.cell - (style.pad + (style.min_columns - 1) * style.cell), style.pad);
+        // Each box is centered between the dots of the cells it covers.
+        for size in [NodeSize::Small, NodeSize::Medium, NodeSize::Large] {
+            let node = Node { size, ..sample().nodes[0].clone() };
+            let (x, y, w, h) = node_rect(style, &node);
+            let (sw, sh) = crate::style::node_span(style, size);
+            let (left_dot, right_dot) = (style.pad, style.pad + sw * style.cell);
+            let (top_dot, bottom_dot) = (style.pad, style.pad + sh * style.cell);
+            assert_eq!(x - left_dot, right_dot - (x + w), "{size:?} horizontal");
+            assert_eq!(y - top_dot, bottom_dot - (y + h), "{size:?} vertical");
+        }
+        assert!(svg.contains(r#"width="896" height="560""#));
     }
 
     #[test]
@@ -570,8 +599,13 @@ mod tests {
         doc.edges[0].from_side = Some(crate::manifest::Side::Left);
         doc.edges[0].to_side = Some(crate::manifest::Side::Left);
         let svg = build_svg(&doc, crate::style::diagram_style());
-        // Both left ports sit at x = 28; the bracket runs half a cell (28) further out.
-        assert!(svg.contains(r#"<path d="M28 56 L0 56 L0 224 L28 224""#), "{svg}");
+        // start (medium) overhangs its dots to x = 20 and decide (small) sits at 32; the
+        // bracket runs half a cell past the outer port, kept on the canvas at x = 1.
+        assert!(svg.contains(r#"<path d="M20 56 L1 56 L1 224 L32 224""#), "{svg}");
+        doc.nodes[0].grid_position = GridPosition { x: 2, y: 0 };
+        doc.nodes[1].grid_position = GridPosition { x: 2, y: 3 };
+        let svg = build_svg(&doc, crate::style::diagram_style());
+        assert!(svg.contains(r#"<path d="M132 56 L104 56 L104 224 L144 224""#), "{svg}");
     }
 
     #[test]
@@ -587,8 +621,8 @@ mod tests {
         assert!(!svg.contains("process · medium") && !svg.contains("decision · small"), "the type is not drawn");
         // start (medium) → decide (small) share a Grid row, so despite different box
         // heights the Edge is one straight line on the row's center (y = 28 + 56/2).
-        assert!(svg.contains(r#"<path d="M156 56 L140 56""#), "{svg}");
-        assert!(svg.contains("<polygon points=\"140,56 "), "arrowhead at the target port");
+        assert!(svg.contains(r#"<path d="M148 56 L144 56""#), "{svg}");
+        assert!(svg.contains("<polygon points=\"144,56 "), "arrowhead at the target port");
         assert!(svg.contains(r#"width="896" height="560""#));
     }
 }

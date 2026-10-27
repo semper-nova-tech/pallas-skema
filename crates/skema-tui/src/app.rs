@@ -1172,8 +1172,8 @@ mod tests {
         let dir = temp_dir("canvas");
         let mut app = open_with(&dir, &two_nodes());
         app.select_id("b");
-        app.move_selected(11, 0);
-        assert!(!app.canvas_fits(10, 16), "b at x = 12 is past a 10-column canvas");
+        app.move_selected(12, 0);
+        assert!(!app.canvas_fits(10, 16), "b at x = 13 is past a 10-column canvas");
         let before = app.manifest.clone();
         app.set_canvas(10, 16);
         assert_eq!(app.manifest, before, "a canvas the Nodes do not fit is refused");
@@ -1182,7 +1182,7 @@ mod tests {
         app.set_canvas(16, 10);
         assert_eq!(app.manifest.as_ref().unwrap().canvas, Some(CanvasSize { columns: 16, rows: 10 }));
         app.move_selected(1, 0);
-        assert_eq!(app.selected_node().unwrap().grid_position.x, 12, "a move past the canvas is refused");
+        assert_eq!(app.selected_node().unwrap().grid_position.x, 13, "a move past the canvas is refused");
     }
 
     #[test]

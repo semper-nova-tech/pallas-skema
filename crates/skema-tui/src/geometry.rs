@@ -4,6 +4,7 @@
 //! A zoom level fixes how many columns and rows one Grid cell takes. Edges attach
 //! to the middle of the Node side that faces the other Node, mirroring the SVG.
 
+use skema_core::style::{diagram_style, node_extent, node_span};
 use skema_core::{Node, NodeSize};
 
 /// How one Grid cell maps onto characters at a zoom level.
@@ -21,12 +22,13 @@ pub struct Zoom {
 }
 
 /// Zoom levels from overview to large. Node widths keep the SVG's proportions
-/// (about 1.9, 2.3, and 2.8 cells) so a Diagram that fits at one level fits at all.
+/// (about 1.9, 2.3, and 2.8 cells). They are odd so a box centers exactly
+/// between the dots of the cells it covers, as in the SVG.
 pub const ZOOMS: [Zoom; 4] = [
     Zoom { cell_w: 4, cell_h: 2, node_h: 1, small: 7, medium: 9, large: 11, pad_x: 1, pad_y: 1 },
-    Zoom { cell_w: 6, cell_h: 3, node_h: 1, small: 11, medium: 14, large: 17, pad_x: 2, pad_y: 1 },
-    Zoom { cell_w: 8, cell_h: 4, node_h: 3, small: 14, medium: 18, large: 22, pad_x: 2, pad_y: 1 },
-    Zoom { cell_w: 12, cell_h: 6, node_h: 5, small: 22, medium: 28, large: 34, pad_x: 3, pad_y: 1 },
+    Zoom { cell_w: 6, cell_h: 3, node_h: 1, small: 11, medium: 13, large: 17, pad_x: 2, pad_y: 1 },
+    Zoom { cell_w: 8, cell_h: 4, node_h: 3, small: 13, medium: 17, large: 21, pad_x: 2, pad_y: 1 },
+    Zoom { cell_w: 12, cell_h: 6, node_h: 5, small: 21, medium: 27, large: 33, pad_x: 3, pad_y: 1 },
 ];
 
 pub const DEFAULT_ZOOM: usize = 2;
@@ -82,7 +84,7 @@ impl Zoom {
         }
     }
 
-    /// Character origin of a Grid cell.
+    /// Character position of a Grid cell's dot, its top-left corner.
     pub fn cell_origin(&self, x: i64, y: i64) -> (i64, i64) {
         (self.pad_x + x * self.cell_w, self.pad_y + y * self.cell_h)
     }
@@ -98,8 +100,19 @@ impl Zoom {
     }
 
     pub fn node_rect(&self, node: &Node) -> Rect {
-        let (col, row) = self.cell_origin(node.grid_position.x, node.grid_position.y);
-        Rect { col, row, w: self.node_width(node.size), h: self.node_h }
+        self.box_rect(node.grid_position.x, node.grid_position.y, node.size)
+    }
+
+    /// A box of `size` at a Grid cell, centered between the dots of the cells it
+    /// covers (the SVG's span, `skema_core::style::node_span`). The dots are not
+    /// part of the box, so the room between two dots is one character short of the span.
+    pub fn box_rect(&self, x: i64, y: i64, size: NodeSize) -> Rect {
+        let (sw, sh) = node_span(diagram_style(), size);
+        let (dot_col, dot_row) = self.cell_origin(x, y);
+        let (w, h) = (self.node_width(size), self.node_h);
+        let col = dot_col + 1 + (sw * self.cell_w - 1 - w).div_euclid(2);
+        let row = dot_row + 1 + (sh * self.cell_h - 1 - h).div_euclid(2);
+        Rect { col, row, w, h }
     }
 
     /// Drag distance in whole Grid cells: the snap rule for the mouse.
@@ -109,16 +122,20 @@ impl Zoom {
         (dx, dy)
     }
 
-    /// Size of the drawing surface in characters: at least the minimum Grid, grown to fit content.
+    /// Dot columns and rows on the surface: at least the canvas, grown to fit the
+    /// Nodes in whole cells like the SVG.
+    pub fn dot_grid(&self, nodes: &[Node], min_columns: i64, min_rows: i64) -> (i64, i64) {
+        nodes.iter().fold((min_columns, min_rows), |(c, r), node| {
+            let (nc, nr) = node_extent(diagram_style(), node);
+            (c.max(nc), r.max(nr))
+        })
+    }
+
+    /// Size of the drawing surface in characters: the dot grid with an even
+    /// margin of `pad` on every side.
     pub fn surface_size(&self, nodes: &[Node], min_columns: i64, min_rows: i64) -> (i64, i64) {
-        let mut cols = min_columns * self.cell_w;
-        let mut rows = min_rows * self.cell_h;
-        for node in nodes {
-            let r = self.node_rect(node);
-            cols = cols.max(r.col - self.pad_x + r.w + 1);
-            rows = rows.max(r.row - self.pad_y + r.h + 1);
-        }
-        (cols + self.pad_x * 2, rows + self.pad_y * 2)
+        let (columns, rows) = self.dot_grid(nodes, min_columns, min_rows);
+        (self.pad_x * 2 + (columns - 1) * self.cell_w + 1, self.pad_y * 2 + (rows - 1) * self.cell_h + 1)
     }
 }
 
@@ -274,6 +291,12 @@ pub fn route(from: Port, to: Port, reach: i64) -> Vec<(i64, i64)> {
     pts
 }
 
+/// Keep a route on a surface of `cols` by `rows`: a bracket beside a box in the
+/// first or last column could otherwise run off the edge, as in the SVG.
+pub fn clamp_route(pts: Vec<(i64, i64)>, cols: i64, rows: i64) -> Vec<(i64, i64)> {
+    pts.into_iter().map(|(c, r)| (c.clamp(0, cols - 1), r.clamp(0, rows - 1))).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,12 +318,13 @@ mod tests {
     #[test]
     fn ports_sit_at_side_midpoints_just_outside_the_box() {
         let rect = Z.node_rect(&node(1, 1, NodeSize::Medium));
-        assert_eq!(rect, Rect { col: 10, row: 5, w: 18, h: 3 });
+        // Dots at (10, 5) and (26, 9); the medium box overhangs both dot columns by one.
+        assert_eq!(rect, Rect { col: 10, row: 6, w: 17, h: 3 });
         let [left, right, top, bottom] = ports(&rect);
-        assert_eq!((left.col, left.row), (9, 6));
-        assert_eq!((right.col, right.row), (28, 6));
-        assert_eq!((top.col, top.row), (19, 4));
-        assert_eq!((bottom.col, bottom.row), (19, 8));
+        assert_eq!((left.col, left.row), (9, 7));
+        assert_eq!((right.col, right.row), (27, 7));
+        assert_eq!((top.col, top.row), (18, 5));
+        assert_eq!((bottom.col, bottom.row), (18, 9));
     }
 
     #[test]
@@ -356,6 +380,22 @@ mod tests {
     }
 
     #[test]
+    fn boxes_center_between_their_dots_at_every_zoom() {
+        for z in ZOOMS {
+            for size in [NodeSize::Small, NodeSize::Medium, NodeSize::Large] {
+                let (sw, _) = node_span(diagram_style(), size);
+                let r = z.node_rect(&node(2, 1, size));
+                let (left_dot, _) = z.cell_origin(2, 1);
+                let right_dot = left_dot + sw * z.cell_w;
+                assert_eq!(r.col - left_dot, right_dot - (r.col + r.w - 1), "{size:?} at cell_w {}", z.cell_w);
+            }
+            let (cols, rows) = z.surface_size(&[], 16, 10);
+            let (last_col, last_row) = z.cell_origin(15, 9);
+            assert_eq!((cols - 1 - last_col, rows - 1 - last_row), (z.pad_x, z.pad_y), "even margins");
+        }
+    }
+
+    #[test]
     fn cell_at_inverts_cell_origin_at_every_zoom() {
         for z in ZOOMS {
             let (c, r) = z.cell_origin(3, 2);
@@ -369,10 +409,10 @@ mod tests {
     #[test]
     fn fit_zoom_is_limited_by_whichever_dimension_runs_out_first() {
         let nodes: Vec<Node> = vec![];
-        // 16 x 10 Grid. Level 3 needs 198 x 62; level 2 132 x 42; level 1 100 x 32; level 0 66 x 22.
+        // 16 x 10 dots. Level 3 needs 187 x 57; level 2 125 x 39; level 1 95 x 30; level 0 63 x 21.
         assert_eq!(fit_zoom(&nodes, 16, 10, 200, 70), 3);
         assert_eq!(fit_zoom(&nodes, 16, 10, 140, 60), 2);
-        assert_eq!(fit_zoom(&nodes, 16, 10, 140, 40), 1, "height limits before width");
+        assert_eq!(fit_zoom(&nodes, 16, 10, 140, 35), 1, "height limits before width");
         assert_eq!(fit_zoom(&nodes, 16, 10, 110, 60), 1, "width limits before height");
         assert_eq!(fit_zoom(&nodes, 16, 10, 70, 25), 0);
         assert_eq!(fit_zoom(&nodes, 16, 10, 20, 5), 0, "never below the overview level");
