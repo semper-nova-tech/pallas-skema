@@ -22,8 +22,11 @@ which redraws when the file changes.
 command -v skema || ls ~/.local/bin/skema || ls target/release/skema
 ```
 
-Use the first one found. If none exists, tell the user `skema` is missing and
-offer the one-line install, which needs no Rust:
+Use the first one found. This skill needs `skema` 0.2.1 or newer; check with
+`skema --version`. A binary that rejects `--version` is older than that.
+
+If none exists, or it is older, tell the user and offer the one-line install,
+which needs no Rust and also upgrades an old binary in place:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.sh | sh

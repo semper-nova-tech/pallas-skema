@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use skema::cli::{format_cli_failure, run_open_editor, run_validate};
 
 #[derive(Parser)]
-#[command(name = "skema", about = "Pallas Skema v1 — validate, render, and open the terminal Editor")]
+#[command(name = "skema", version, about = "Pallas Skema — validate, render, and open the terminal Editor")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

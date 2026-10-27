@@ -122,8 +122,10 @@ The binary is `target/release/skema`. It has no runtime dependencies.
 
 [cargo-dist](https://github.com/axodotdev/cargo-dist) builds the prebuilt
 binaries (`dist-workspace.toml`, `.github/workflows/release.yml`). To cut a
-release, set one version in `crates/skema/Cargo.toml` and the four plugin
-manifests, commit, and push a matching tag:
+release, set one version in `crates/skema/Cargo.toml`, the four plugin
+manifests, and the "needs `skema` X or newer" line in
+`skills/skema-diagram/SKILL.md` (a test fails until they agree), commit, and
+push a matching tag:
 
 ```bash
 git tag v0.2.1 && git push origin v0.2.1
