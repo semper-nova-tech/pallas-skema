@@ -16,6 +16,7 @@ Actors are confirmed in [PERSONAS.md](PERSONAS.md).
 | Edge | A directed connection from one Node to another. It may carry a label. | arrow, line, connector |
 | Node type | The kind of Node. The design documents name process, decision, and note. | shape |
 | Node size | The predefined size of a Node. The design documents name small, medium, and large. | arbitrary dimensions |
+| Canvas | The size of a Diagram in whole Grid cells, set in the Manifest. Every Node box must fit inside it. Without one, the canvas starts at 16×10 and grows to fit. | page, artboard, viewport |
 | Validation | The check that a Manifest obeys the format rules before an SVG is written. | lint, schema check |
 | Diagram | The flow a Manifest describes. It is a picture of a flow, not executable automation. | workflow, pipeline, script |
 | Human reviewer | The person who reads a Manifest, reviews an SVG, and arranges a Diagram in the Editor. | user, author, person |

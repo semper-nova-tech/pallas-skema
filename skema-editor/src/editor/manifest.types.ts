@@ -22,7 +22,13 @@ export interface ManifestEdge {
   label?: string;
 }
 
+export interface CanvasSize {
+  columns: number;
+  rows: number;
+}
+
 export interface ManifestDocument {
+  canvas?: CanvasSize;
   nodes: ManifestNode[];
   edges: ManifestEdge[];
 }

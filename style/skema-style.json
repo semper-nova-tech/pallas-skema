@@ -11,7 +11,7 @@
   "edgeWidth": "1.5",
   "edgeHead": 8,
   "dotRadius": "2",
-  "dotOffset": 8,
+  "dotOffset": 0,
   "labelSize": 13,
   "metaSize": 11,
   "edgeLabelSize": 11,

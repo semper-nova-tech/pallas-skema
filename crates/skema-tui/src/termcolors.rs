@@ -2,17 +2,28 @@
 //! theme can be exported to SVG and PNG. Talks to /dev/tty directly, before the
 //! event loop owns stdin, and gives up quietly when the terminal does not answer.
 
+#[cfg(unix)]
 use std::fs::OpenOptions;
+#[cfg(unix)]
 use std::io::{Read, Write};
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 use skema_core::StyleColor;
+
+/// Windows has no /dev/tty to query, so Match terminal exports use Phosphor there.
+#[cfg(not(unix))]
+pub fn query_palette() -> Option<StyleColor> {
+    None
+}
 
 /// Default foreground and background plus the ANSI slots the Editor uses, as hex.
 /// All queries go out together and every reply is collected within one window,
 /// then anything left in the input is drained so no reply byte reaches the
 /// event loop as a keystroke.
+#[cfg(unix)]
 pub fn query_palette() -> Option<StyleColor> {
     let mut tty = OpenOptions::new()
         .read(true)
@@ -86,11 +97,13 @@ pub fn query_palette() -> Option<StyleColor> {
 }
 
 /// Puts a tty into raw mode and restores its settings on drop.
+#[cfg(unix)]
 struct RawGuard {
     fd: i32,
     saved: libc::termios,
 }
 
+#[cfg(unix)]
 impl RawGuard {
     fn new(tty: &std::fs::File) -> Option<RawGuard> {
         use std::os::unix::io::AsRawFd;
@@ -109,6 +122,7 @@ impl RawGuard {
     }
 }
 
+#[cfg(unix)]
 impl Drop for RawGuard {
     fn drop(&mut self) {
         // SAFETY: restoring the attributes we read from the same fd.
@@ -139,6 +153,7 @@ pub fn parse_reply(text: &str, marker: &str) -> Option<String> {
 }
 
 /// Midpoint of two hex colors, for a dim tone when the terminal lacks bright black.
+#[cfg_attr(not(unix), allow(dead_code))]
 fn mix(a: &str, b: &str) -> String {
     let p = |s: &str, i: usize| u8::from_str_radix(&s[i..i + 2], 16).unwrap_or(0) as u16;
     if a.len() < 7 || b.len() < 7 {

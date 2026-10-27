@@ -6,7 +6,7 @@ use ratatui::style::Color;
 use skema_core::style::{diagram_style, DiagramStyle};
 use skema_core::{ManifestDocument, Node, NodeSize, NodeType};
 
-use crate::geometry::{facing_port, port_on, ranked_ports, route, Port, Rect, Side, Zoom};
+use crate::geometry::{clamp_route, facing_port, port_on, ranked_ports, route, Port, Rect, Side, Zoom};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
@@ -201,18 +201,17 @@ pub fn draw(
 /// Render the Diagram at a zoom level.
 pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
     let View { selected, selected_edge, hover_node, hover_edge, connect_from, ghost, link, show_ports, link_cursor, link_from_side, theme } = *view;
-    let style = diagram_style();
     let pal = palette_for(theme);
-    let (cols, rows) = zoom.surface_size(&doc.nodes, style.min_columns, style.min_rows);
+    let (bound_cols, bound_rows) = doc.grid_bounds();
+    let (cols, rows) = zoom.surface_size(&doc.nodes, bound_cols, bound_rows);
     let mut s = Surface::new(cols, rows, pal.canvas);
 
-    // Grid dots at cell corners.
-    let grid_cols = (cols - 2 * zoom.pad_x) / zoom.cell_w;
-    let grid_rows = (rows - 2 * zoom.pad_y) / zoom.cell_h;
-    for gy in 0..=grid_rows {
-        for gx in 0..=grid_cols {
+    // Grid dots at cell corners, an even margin in from every edge.
+    let (grid_cols, grid_rows) = zoom.dot_grid(&doc.nodes, bound_cols, bound_rows);
+    for gy in 0..grid_rows {
+        for gx in 0..grid_cols {
             let (c, r) = zoom.cell_origin(gx, gy);
-            s.put_fg(c - 1, r - 1, '•', pal.dot);
+            s.put_fg(c, r, '•', pal.dot);
         }
     }
 
@@ -228,7 +227,7 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
         let Some((src, dst)) = ports[i] else { continue };
         let heavy = Some(i) == hover_edge || Some(i) == selected_edge;
         let color = if Some(i) == selected_edge { pal.phosphor } else { pal.line };
-        overlays.extend(draw_edge_lines(&mut s, src, dst, edge.label.as_deref(), color, heavy, pal.phosphor_dim));
+        overlays.extend(draw_edge_lines(&mut s, src, dst, zoom.reach(src.side), edge.label.as_deref(), color, heavy, pal.phosphor_dim));
     }
     for overlay in overlays {
         match overlay {
@@ -262,7 +261,7 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
                     Side::Bottom => Side::Top,
                 };
                 let dst = Port { col: cc, row: cr, side: dst_side };
-                for pair in route(src, dst).windows(2) {
+                for pair in route(src, dst, zoom.reach(src.side)).windows(2) {
                     let (a, b) = (pair[0], pair[1]);
                     if a.1 == b.1 {
                         for x in a.0.min(b.0)..=a.0.max(b.0) {
@@ -294,7 +293,7 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
                     Some((c, r)) => port_on(&tr, crate::geometry::nearest_side(&tr, c, r)),
                     None => facing_port(&tr, fr.center().0, fr.center().1),
                 };
-                for pair in route(src, dst).windows(2) {
+                for pair in route(src, dst, zoom.reach(src.side)).windows(2) {
                     let (a, b) = (pair[0], pair[1]);
                     if a.1 == b.1 {
                         for x in a.0.min(b.0)..=a.0.max(b.0) {
@@ -374,7 +373,8 @@ pub fn edge_at(doc: &ManifestDocument, zoom: &Zoom, col: i64, row: i64) -> Optio
     let ports = all_edge_ports(doc, zoom);
     (0..doc.edges.len()).rev().find_map(|i| {
         let (src, dst) = ports[i]?;
-        let pts = route(src, dst);
+        let (cols, rows) = zoom.surface_size(&doc.nodes, doc.grid_bounds().0, doc.grid_bounds().1);
+        let pts = clamp_route(route(src, dst, zoom.reach(src.side)), cols, rows);
         let on_line = pts.windows(2).any(|pair| {
             let (a, b) = (pair[0], pair[1]);
             (a.1 == b.1 && row == a.1 && (a.0.min(b.0)..=a.0.max(b.0)).contains(&col))
@@ -384,10 +384,10 @@ pub fn edge_at(doc: &ManifestDocument, zoom: &Zoom, col: i64, row: i64) -> Optio
     })
 }
 
-fn draw_edge_lines(s: &mut Surface, src: Port, dst: Port, label: Option<&str>, color: Color, heavy: bool, pal_dim: Color) -> Vec<Overlay> {
+fn draw_edge_lines(s: &mut Surface, src: Port, dst: Port, reach: i64, label: Option<&str>, color: Color, heavy: bool, pal_dim: Color) -> Vec<Overlay> {
     let mut overlays = Vec::new();
     let (h, v) = if heavy { ('━', '┃') } else { ('─', '│') };
-    let pts = route(src, dst);
+    let pts = clamp_route(route(src, dst, reach), s.cols, s.rows);
     let mut longest: Option<((i64, i64), (i64, i64))> = None;
     for pair in pts.windows(2) {
         let (a, b) = (pair[0], pair[1]);
@@ -537,8 +537,7 @@ fn draw_node(s: &mut Surface, zoom: &Zoom, node: &Node, selected: bool, hovered:
 /// Dashed outline at the snap target. Bright when the cell is free, dim with a
 /// cross when Validation would refuse the move.
 fn draw_ghost(s: &mut Surface, zoom: &Zoom, g: Ghost, pal: &Palette) {
-    let (col, row) = zoom.cell_origin(g.x.max(0), g.y.max(0));
-    let r = Rect { col, row, w: zoom.node_width(g.size), h: zoom.node_h };
+    let r = zoom.box_rect(g.x.max(0), g.y.max(0), g.size);
     let fg = if g.allowed { pal.phosphor } else { pal.phosphor_dim };
     if r.h == 1 {
         for c in r.col + 1..r.col + r.w - 1 {
@@ -729,14 +728,14 @@ mod tests {
         let doc = golden();
         let free = Ghost { x: 6, y: 4, size: NodeSize::Medium, allowed: true };
         let s = draw(&doc, &Z, Some("start"), None, Some(free));
-        let (c, r) = Z.cell_origin(6, 4);
+        let crate::geometry::Rect { col: c, row: r, .. } = Z.box_rect(6, 4, NodeSize::Medium);
         assert_eq!(s.get(c, r).unwrap().ch, '┌');
         assert_eq!(s.get(c + 1, r).unwrap().ch, '┄');
         assert_eq!(s.get(c, r + 1).unwrap().ch, '┆');
         assert_eq!(s.get(c + 1, r).unwrap().fg, palette().phosphor);
         let blocked = Ghost { x: 6, y: 4, size: NodeSize::Medium, allowed: false };
         let s = draw(&doc, &Z, Some("start"), None, Some(blocked));
-        assert_eq!(s.get(c + 9, r + 1).unwrap().ch, '✗');
+        assert_eq!(s.get(c + Z.medium / 2, r + 1).unwrap().ch, '✗');
         assert_eq!(s.get(c + 1, r).unwrap().fg, palette().phosphor_dim);
     }
 

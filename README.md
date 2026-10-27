@@ -1,59 +1,90 @@
 # Pallas Skema
 
-Diagrams that an agent and a person edit together.
+Skema is an agent native diagramming tool that brings beautiful diagrams as editable,
+shareable artifacts to your terminal with a one shot.
 
-A Skema diagram is one small JSON file: nodes on a grid, edges between them,
+It speeds up comprehension, design, and iteration with your agent through visual reasoning.
+
+### For the Agent:  
+- Using a coordinate system, validation rules, an ultra fast rust package and a skill, the agents
+can more effectively reason through visual space and present designs that a human can understand.
+- SVG and PNG artifacts out of the box are a quick visual reference an agent can spot check independently.
+- A JSON manifest saves the diagram state. Commit it to the repo, exclude it, throw it away, modify it,
+ask your agent to compare. The format is easy to read and unbreakable syntactically. 
+
+### For the Human User: 
+- Point your agent at a markdown document or domain of code and just ask for a diagram.
+- Edit manually in a TUI or just see the TUI for a spot check while iteratively prompting. 
+- Terminal multiplexer friendly. Integrated with herdr with more to come. Ask a diagram agent to watch
+another terminal "pane" and diagram out the logs. 
+- Auto save and validation keeps the diagram and svg / png in sync at all times. 
+- copy to clipboard convenience button lets you Diagram, copy, and share with just a prompt and a click.
+- Can match your terminal theme with ANSI palettes open to further customization. 
+
+
+A Skema diagram is one small JSON file: representing nodes on a grid, edges between them,
 labels and descriptions. The agent edits that file and runs one command to
-validate it and render a deterministic SVG. The person opens the same file in
-a terminal Editor, in a Herdr pane beside the agent, and arranges it by hand.
-Both see the same picture, because there is only one source of truth and one
-renderer.
+validate it and render an SVG. The user opens the same file in
+a terminal Editor, or in a Herdr pane beside the agent, and rearranges by hand. Autosave syncs all the artifacts.
+
 
 ![The Skema loop: an agent edits the JSON manifest, skema render validates and draws the picture, a person reviews and arranges it in the terminal Editor, and the file round-trips](docs/skema-loop.png)
 
-- Invalid diagrams never render. Validation names the broken rule and leaves
-  the last good picture untouched.
+- Invalid diagrams dont render. Validation displays the broken rule and leaves
+  the last good picture.
 - The same manifest always produces the same SVG, so diffs are small and
-  reviewable.
+  reviewable. 
 - The Editor snaps to the grid, refuses moves that would overlap, and saves
-  every accepted edit at once. An agent's write shows up in the pane as it
+  every edit at once. An agent's write shows up in the pane as it
   happens.
 
-## Install for your agent
+## Install
 
-The skill `skema-diagram` teaches an agent how to create and change diagrams,
-when to render, and how to open the Editor pane for you. It is one directory
-that every host reads in the same format.
+**1. Add the skill to your agent.** The `skema-diagram` skill teaches an agent
+to create and change diagrams, when to render, and how to open the Editor pane
+for you.
 
-**Claude Code**
+Claude Code, from the marketplace:
 
 ```bash
 claude plugin marketplace add semper-nova-tech/pallas-skema
 claude plugin install pallas-skema@pallas-skema
 ```
 
-**Cursor**
+Cursor: add this repository as a plugin. It carries
+`.cursor-plugin/plugin.json`, which points at the same `skills/` directory.
 
-Add this repository as a plugin; it carries `.cursor-plugin/plugin.json`
-pointing at the same `skills/` directory.
-
-**OpenAI Codex**
+OpenAI Codex:
 
 ```bash
 git clone https://github.com/semper-nova-tech/pallas-skema
 ln -s "$PWD/pallas-skema/skills/skema-diagram" ~/.codex/skills/skema-diagram
 ```
 
-**Herdr** (the Editor as a pane)
+**2. `skema` installs itself.** The skill needs the `skema` binary, one
+prebuilt file for macOS, Linux, and Windows, with no Rust needed. On first use
+the agent notices it is missing and offers to install it for you. To install it
+yourself instead, on macOS or Linux:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.ps1 | iex"
+```
+
+**3. Optional: Herdr.** The Editor runs in any terminal: a second tab, a tmux
+split, or Windows Terminal. In [Herdr](https://herdr.dev)
+the agent can open it as a pane beside itself:
 
 ```bash
 herdr plugin install semper-nova-tech/pallas-skema/herdr-plugin
 ```
 
-The agent and the pane both need the `skema` binary. Today that means a Rust
-toolchain and `cargo build --release` in this repository; the Herdr plugin's
-build step does this for you when cargo is present. Prebuilt binaries are the
-next step.
+The plugin installs `skema` for you if step 2 has not.
 
 ## Try it
 
@@ -61,7 +92,10 @@ next step.
 # agent side: edit flow.json, then
 skema render --manifest flow.json --svg flow.svg
 
-# person side, inside Herdr
+# person side, in a second terminal (or a tmux split)
+skema open-editor --manifest flow.json --svg flow.svg
+
+# or, inside Herdr, as a pane
 herdr plugin pane open --plugin pallas.skema --entrypoint editor \
   --env SKEMA_MANIFEST=$PWD/flow.json --focus
 ```
@@ -76,13 +110,33 @@ Reference for contributors follows. Design documents:
 
 ## Build
 
-Requires a Rust toolchain (`rustup`).
+From source, for contributors. Requires a Rust toolchain (`rustup`).
 
 ```bash
 cargo build --release
 ```
 
 The binary is `target/release/skema`. It has no runtime dependencies.
+
+## Release
+
+[cargo-dist](https://github.com/axodotdev/cargo-dist) builds the prebuilt
+binaries (`dist-workspace.toml`, `.github/workflows/release.yml`). To cut a
+release, set one version in `crates/skema/Cargo.toml`, the four plugin
+manifests, and the "needs `skema` X or newer" line in
+`skills/skema-diagram/SKILL.md` (a test fails until they agree), commit, and
+push a matching tag:
+
+```bash
+git tag v0.2.1 && git push origin v0.2.1
+```
+
+CI builds macOS and Linux (arm64 and x86_64) and Windows (x86_64), publishes a
+GitHub Release with `skema-installer.sh` and `skema-installer.ps1`. The
+installers always fetch the latest release, so the skill's install offer picks
+up a new version without any change.
+`dist plan` checks the setup locally. After changing `dist-workspace.toml`, run
+`dist generate` to refresh the workflow.
 
 ## Agent loop
 
@@ -116,7 +170,12 @@ skema open-editor --manifest flow.json --svg flow.svg
 - Edges leave and enter at the middle of a side of each Node. Dragging from a
   connection handle fixes the side it leaves by, and the side you drop on is
   where it enters; those sides are saved in the Manifest. Edges made without a
-  handle use the side that faces the other Node.
+  handle use the side that faces the other Node. An Edge that leaves and
+  enters by the same side steps half a cell out, like a bracket.
+- Canvas, above Settings, fixes the canvas size: 16×10 or 24×15 landscape
+  (▭), 10×16 or 15×24 portrait (▯). The choice is saved in the Manifest as
+  `canvas` and the SVG takes that size. A size that would leave a Node outside
+  is dim and refused, and with a canvas set, a move past its edge is refused.
 - Every Node shares one color and the type is not drawn; decisions have rounded
   corners. The selected Node is drawn filled; others are outlined. A Node has a
   `label` and an optional `description`.

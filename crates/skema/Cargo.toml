@@ -1,8 +1,11 @@
 [package]
 name = "skema"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
-description = "Pallas Skema v1 command-line tool: validate, render, and open the terminal Editor"
+description = "Pallas Skema: validate, render, and open the terminal Editor for agent-native diagrams"
+repository = "https://github.com/semper-nova-tech/pallas-skema"
+homepage = "https://github.com/semper-nova-tech/pallas-skema"
+license = "MIT"
 
 [[bin]]
 name = "skema"

@@ -223,3 +223,26 @@ fn run_validate_rejects_missing_manifest() {
     let path = workspace_temp("missing").join("nope.json");
     assert!(run_validate(&path).is_err());
 }
+
+#[test]
+fn version_flag_prints_the_package_version() {
+    let output = Command::new(skema_bin()).arg("--version").output().unwrap();
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), format!("skema {}", env!("CARGO_PKG_VERSION")));
+}
+
+/// One release version everywhere: the binary, the version the skill asks for,
+/// and the four plugin manifests. Bump them together.
+#[test]
+fn skill_and_plugin_manifests_name_the_binary_version() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let version = env!("CARGO_PKG_VERSION");
+    let skill = fs::read_to_string(root.join("skills/skema-diagram/SKILL.md")).unwrap();
+    assert!(skill.contains(&format!("needs `skema` {version} or newer")), "SKILL.md must ask for skema {version}");
+    for manifest in [".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".cursor-plugin/plugin.json"] {
+        let text = fs::read_to_string(root.join(manifest)).unwrap();
+        assert!(text.contains(&format!("\"version\": \"{version}\"")), "{manifest} must be {version}");
+    }
+    let herdr = fs::read_to_string(root.join("herdr-plugin/herdr-plugin.toml")).unwrap();
+    assert!(herdr.contains(&format!("version = \"{version}\"")), "herdr-plugin.toml must be {version}");
+}

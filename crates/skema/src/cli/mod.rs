@@ -109,6 +109,7 @@ pub fn run_open_editor(
 
 fn empty_manifest() -> ManifestDocument {
     ManifestDocument {
+        canvas: None,
         nodes: vec![],
         edges: vec![],
     }
