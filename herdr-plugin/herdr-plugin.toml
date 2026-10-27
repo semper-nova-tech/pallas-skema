@@ -1,6 +1,6 @@
 id = "pallas.skema"
 name = "Skema Editor"
-version = "0.2.0"
+version = "0.2.1"
 min_herdr_version = "0.8.2"
 description = "Pallas Skema terminal Editor: arrange a JSON Diagram on a Grid in a pane while an agent edits the same file"
 platforms = ["linux", "macos"]
