@@ -29,7 +29,9 @@ offer the one-line install, which needs no Rust:
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.sh | sh
 ```
 
-(or `brew install semper-nova-tech/tap/skema`). Run it only after they agree.
+On Windows, in PowerShell:
+`powershell -ExecutionPolicy Bypass -c "irm https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.ps1 | iex"`.
+Run it only after they agree.
 Inside a pallas-skema checkout, `cargo build --release` also works. Do not
 continue without the binary.
 

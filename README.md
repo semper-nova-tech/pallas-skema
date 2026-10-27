@@ -61,14 +61,10 @@ git clone https://github.com/semper-nova-tech/pallas-skema
 ln -s "$PWD/pallas-skema/skills/skema-diagram" ~/.codex/skills/skema-diagram
 ```
 
-**2. Install `skema`.** One prebuilt binary for macOS, Linux, and Windows, no
-Rust needed:
-
-```bash
-brew install semper-nova-tech/tap/skema
-```
-
-or
+**2. `skema` installs itself.** The skill needs the `skema` binary, one
+prebuilt file for macOS, Linux, and Windows, with no Rust needed. On first use
+the agent notices it is missing and offers to install it for you. To install it
+yourself instead, on macOS or Linux:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.sh | sh
@@ -79,9 +75,6 @@ Windows (PowerShell):
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.ps1 | iex"
 ```
-
-If you skip this step, the agent notices on first use and offers the same
-command.
 
 **3. Optional: Herdr.** The Editor runs in any terminal: a second tab, a tmux
 split, or Windows Terminal. In [Herdr](https://herdr.dev)
@@ -137,7 +130,9 @@ git tag v0.2.1 && git push origin v0.2.1
 ```
 
 CI builds macOS and Linux (arm64 and x86_64) and Windows (x86_64), publishes a
-GitHub Release with `skema-installer.sh` and `skema-installer.ps1`, and pushes the formula to `semper-nova-tech/homebrew-tap`.
+GitHub Release with `skema-installer.sh` and `skema-installer.ps1`. The
+installers always fetch the latest release, so the skill's install offer picks
+up a new version without any change.
 `dist plan` checks the setup locally. After changing `dist-workspace.toml`, run
 `dist generate` to refresh the workflow.
 
