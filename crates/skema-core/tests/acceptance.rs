@@ -130,6 +130,7 @@ fn ac_preserve_svg() {
     let before = fs::read(&path).unwrap();
 
     let invalid = ManifestDocument {
+        canvas: None,
         nodes: good.nodes.clone(),
         edges: vec![skema_core::Edge::new("start", "ghost")],
     };

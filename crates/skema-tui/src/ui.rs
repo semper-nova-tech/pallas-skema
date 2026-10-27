@@ -11,7 +11,6 @@ use crate::app::{file_name, App, Button, Focus, Mode, NodeField, StatusKind};
 use crate::canvas::{self, fit, node_overflows, palette_for, wrap, Palette, Surface, Theme};
 use ratatui::widgets::Clear;
 use crate::geometry::{fit_zoom, ZOOMS};
-use skema_core::style::diagram_style;
 
 pub const PANEL_W: u16 = 24;
 /// The panel widens while an editor box is open so labels and descriptions have room.
@@ -35,6 +34,8 @@ pub struct Hits {
     pub settings_button: Rect,
     /// Theme rows in the expanded settings: (row rectangle, theme).
     pub theme_rows: Vec<(Rect, Theme)>,
+    /// Canvas size presets: (button rectangle, (columns, rows)).
+    pub canvas_buttons: Vec<(Rect, (i64, i64))>,
     /// Panel rows that select an Edge when clicked: (row rectangle, edge index).
     pub edge_rows: Vec<(Rect, usize)>,
 }
@@ -62,6 +63,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Hits {
         copy_button: panel.copy_button,
         settings_button: panel.settings_button,
         theme_rows: panel.theme_rows,
+        canvas_buttons: panel.canvas_buttons,
         edge_rows: panel.edge_rows,
     }
 }
@@ -109,8 +111,8 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
 
     // The furthest zoom-out is the level where the whole Diagram fits the pane,
     // limited by whichever dimension runs out first.
-    let style = diagram_style();
-    app.fit_zoom = fit_zoom(&doc.nodes, style.min_columns, style.min_rows, inner.width as i64, inner.height as i64);
+    let (bound_cols, bound_rows) = doc.grid_bounds();
+    app.fit_zoom = fit_zoom(&doc.nodes, bound_cols, bound_rows, inner.width as i64, inner.height as i64);
     if app.zoom < app.fit_zoom {
         app.zoom = app.fit_zoom;
         app.scroll = (0, 0);
@@ -258,6 +260,7 @@ struct PanelHits {
     add_button: Rect,
     settings_button: Rect,
     theme_rows: Vec<(Rect, Theme)>,
+    canvas_buttons: Vec<(Rect, (i64, i64))>,
     edge_rows: Vec<(Rect, usize)>,
 }
 
@@ -284,22 +287,50 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
     let copy_button = Rect { x: area.x + 1, y: area.y + 1, width: area.width.saturating_sub(2), height: 1 };
     let add_button = Rect { x: area.x + 1, y: area.y + 3, width: area.width.saturating_sub(2), height: 1 };
 
+    // Canvas size presets, two per line: landscape ▭ then portrait ▯. The chosen
+    // one is filled; one the Nodes do not fit is dim and refused on click.
+    let row_y = |lines: &Vec<Line>| area.y + lines.len() as u16;
+    top.push(Line::from(Span::styled(" Canvas", dim)));
+    let chosen = app.manifest.as_ref().and_then(|d| d.canvas).map(|c| (c.columns, c.rows));
+    let mut canvas_buttons: Vec<(Rect, (i64, i64))> = Vec::new();
+    for pair in crate::app::CANVAS_PRESETS.chunks(2) {
+        let y = row_y(&top);
+        let mut spans = vec![Span::raw("  ")];
+        for &(columns, rows) in pair {
+            let shape = if columns >= rows { "▭" } else { "▯" };
+            let text = format!("{shape} {columns}×{rows}");
+            let style = if chosen == Some((columns, rows)) {
+                filled
+            } else if app.canvas_fits(columns, rows) {
+                bright
+            } else {
+                dim
+            };
+            let x = area.x + spans.iter().map(|s| s.width() as u16).sum::<u16>();
+            canvas_buttons.push((Rect { x, y, width: text.chars().count() as u16, height: 1 }, (columns, rows)));
+            spans.push(Span::styled(text, style));
+            spans.push(Span::raw("   "));
+        }
+        top.push(Line::from(spans));
+    }
+    top.push(Line::from(""));
+
     // Settings: a collapsed row, or the row plus one line per theme.
     let chevron = if app.settings_open { "▾" } else { "▸" };
+    let settings_button = Rect { x: area.x + 1, y: row_y(&top), width: area.width.saturating_sub(2), height: 1 };
     top.push(Line::from(vec![
         Span::raw(" "),
         Span::styled(format!("{chevron} Settings"), Style::default().fg(pal.phosphor_dim)),
     ]));
-    let settings_button = Rect { x: area.x + 1, y: area.y + 5, width: area.width.saturating_sub(2), height: 1 };
     let mut theme_rows: Vec<(Rect, Theme)> = Vec::new();
     if app.settings_open {
         top.push(Line::from(Span::styled("   Theme", Style::default().fg(pal.phosphor_dim))));
-        for (i, theme) in Theme::ALL.into_iter().enumerate() {
+        for theme in Theme::ALL {
             let on = theme == app.theme;
             let mark = if on { "●" } else { "○" };
             let style = if on { Style::default().fg(pal.phosphor) } else { Style::default().fg(pal.phosphor_dim) };
+            theme_rows.push((Rect { x: area.x + 1, y: row_y(&top), width: area.width.saturating_sub(2), height: 1 }, theme));
             top.push(Line::from(Span::styled(format!("   {mark} {}", theme.name()), style)));
-            theme_rows.push((Rect { x: area.x + 1, y: area.y + 7 + i as u16, width: area.width.saturating_sub(2), height: 1 }, theme));
         }
     }
     top.push(Line::from(""));
@@ -370,7 +401,7 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
         }
         _ => {}
     }
-    PanelHits { copy_button, add_button, settings_button, theme_rows, edge_rows }
+    PanelHits { copy_button, add_button, settings_button, theme_rows, canvas_buttons, edge_rows }
 }
 
 /// Wrap a field value onto up to `max_lines` lines of `width`, keeping the tail
@@ -405,4 +436,32 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) {
         Paragraph::new(Line::from(Span::styled(format!(" {}", app.key_hint()), Style::default().fg(pal.phosphor_dim)))),
         keys,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    #[test]
+    fn canvas_preset_hits_sit_on_their_labels_above_settings() {
+        let dir = std::env::temp_dir().join(format!("skema-ui-canvas-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = dir.join("d.json");
+        std::fs::write(&manifest, r#"{"nodes":[],"edges":[]}"#).unwrap();
+        let mut app = crate::app::App::open(&manifest, &dir.join("d.svg"));
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        let mut hits = super::Hits::default();
+        terminal.draw(|frame| hits = super::draw(frame, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let text_at = |r: ratatui::layout::Rect| -> String {
+            (r.x..r.x + r.width).map(|x| buffer[(x, r.y)].symbol().to_string()).collect()
+        };
+        assert_eq!(hits.canvas_buttons.len(), 4);
+        for (rect, (columns, rows)) in &hits.canvas_buttons {
+            assert!(text_at(*rect).ends_with(&format!("{columns}×{rows}")), "{:?}", text_at(*rect));
+            assert!(rect.y < hits.settings_button.y, "presets sit above Settings");
+        }
+        assert!(text_at(hits.settings_button).contains("Settings"));
+    }
 }

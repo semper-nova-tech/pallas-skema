@@ -201,9 +201,9 @@ pub fn draw(
 /// Render the Diagram at a zoom level.
 pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
     let View { selected, selected_edge, hover_node, hover_edge, connect_from, ghost, link, show_ports, link_cursor, link_from_side, theme } = *view;
-    let style = diagram_style();
     let pal = palette_for(theme);
-    let (cols, rows) = zoom.surface_size(&doc.nodes, style.min_columns, style.min_rows);
+    let (bound_cols, bound_rows) = doc.grid_bounds();
+    let (cols, rows) = zoom.surface_size(&doc.nodes, bound_cols, bound_rows);
     let mut s = Surface::new(cols, rows, pal.canvas);
 
     // Grid dots at cell corners.
@@ -228,7 +228,7 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
         let Some((src, dst)) = ports[i] else { continue };
         let heavy = Some(i) == hover_edge || Some(i) == selected_edge;
         let color = if Some(i) == selected_edge { pal.phosphor } else { pal.line };
-        overlays.extend(draw_edge_lines(&mut s, src, dst, edge.label.as_deref(), color, heavy, pal.phosphor_dim));
+        overlays.extend(draw_edge_lines(&mut s, src, dst, zoom.reach(src.side), edge.label.as_deref(), color, heavy, pal.phosphor_dim));
     }
     for overlay in overlays {
         match overlay {
@@ -262,7 +262,7 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
                     Side::Bottom => Side::Top,
                 };
                 let dst = Port { col: cc, row: cr, side: dst_side };
-                for pair in route(src, dst).windows(2) {
+                for pair in route(src, dst, zoom.reach(src.side)).windows(2) {
                     let (a, b) = (pair[0], pair[1]);
                     if a.1 == b.1 {
                         for x in a.0.min(b.0)..=a.0.max(b.0) {
@@ -294,7 +294,7 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
                     Some((c, r)) => port_on(&tr, crate::geometry::nearest_side(&tr, c, r)),
                     None => facing_port(&tr, fr.center().0, fr.center().1),
                 };
-                for pair in route(src, dst).windows(2) {
+                for pair in route(src, dst, zoom.reach(src.side)).windows(2) {
                     let (a, b) = (pair[0], pair[1]);
                     if a.1 == b.1 {
                         for x in a.0.min(b.0)..=a.0.max(b.0) {
@@ -374,7 +374,7 @@ pub fn edge_at(doc: &ManifestDocument, zoom: &Zoom, col: i64, row: i64) -> Optio
     let ports = all_edge_ports(doc, zoom);
     (0..doc.edges.len()).rev().find_map(|i| {
         let (src, dst) = ports[i]?;
-        let pts = route(src, dst);
+        let pts = route(src, dst, zoom.reach(src.side));
         let on_line = pts.windows(2).any(|pair| {
             let (a, b) = (pair[0], pair[1]);
             (a.1 == b.1 && row == a.1 && (a.0.min(b.0)..=a.0.max(b.0)).contains(&col))
@@ -384,10 +384,10 @@ pub fn edge_at(doc: &ManifestDocument, zoom: &Zoom, col: i64, row: i64) -> Optio
     })
 }
 
-fn draw_edge_lines(s: &mut Surface, src: Port, dst: Port, label: Option<&str>, color: Color, heavy: bool, pal_dim: Color) -> Vec<Overlay> {
+fn draw_edge_lines(s: &mut Surface, src: Port, dst: Port, reach: i64, label: Option<&str>, color: Color, heavy: bool, pal_dim: Color) -> Vec<Overlay> {
     let mut overlays = Vec::new();
     let (h, v) = if heavy { ('━', '┃') } else { ('─', '│') };
-    let pts = route(src, dst);
+    let pts = route(src, dst, reach);
     let mut longest: Option<((i64, i64), (i64, i64))> = None;
     for pair in pts.windows(2) {
         let (a, b) = (pair[0], pair[1]);

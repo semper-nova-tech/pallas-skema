@@ -64,12 +64,6 @@ if [ -z "$bin" ]; then
   exit 1
 fi
 
-# Herdr routes right-click to its own pane menu by default. The Editor uses a
-# right-button drag to connect Nodes, so route right-click to the pane.
-if [ -n "${HERDR_PLUGIN_ENTRYPOINT_ID:-}" ]; then
-  "${HERDR_BIN_PATH:-herdr}" pane input --current --right-click pane >/dev/null 2>&1 || true
-fi
-
 # The Editor pane should live in the Diagram's directory so Herdr's cwd-following
 # and the agent's relative paths agree.
 mkdir -p "$(dirname -- "$manifest")"

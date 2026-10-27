@@ -66,6 +66,14 @@ pub struct Port {
 }
 
 impl Zoom {
+    /// How far a same-side Edge brackets out past its ports: half a Grid cell.
+    pub fn reach(&self, side: Side) -> i64 {
+        match side {
+            Side::Left | Side::Right => self.cell_w / 2,
+            Side::Top | Side::Bottom => (self.cell_h / 2).max(1),
+        }
+    }
+
     pub fn node_width(&self, size: NodeSize) -> i64 {
         match size {
             NodeSize::Small => self.small,
@@ -221,9 +229,28 @@ pub fn facing_port(rect: &Rect, toward_col: i64, toward_row: i64) -> Port {
 }
 
 /// Orthogonal route from a source port to a target port, as polyline corners.
-pub fn route(from: Port, to: Port) -> Vec<(i64, i64)> {
+/// Two ports on the same side bracket out by `reach` past the outer one, so the
+/// line never runs flat along the boxes.
+pub fn route(from: Port, to: Port, reach: i64) -> Vec<(i64, i64)> {
     let horizontal = |s: Side| matches!(s, Side::Left | Side::Right);
     let mut pts = vec![(from.col, from.row)];
+    if from.side == to.side {
+        match from.side {
+            Side::Left | Side::Right => {
+                let col = if from.side == Side::Left { from.col.min(to.col) - reach } else { from.col.max(to.col) + reach };
+                pts.push((col, from.row));
+                pts.push((col, to.row));
+            }
+            Side::Top | Side::Bottom => {
+                let row = if from.side == Side::Top { from.row.min(to.row) - reach } else { from.row.max(to.row) + reach };
+                pts.push((from.col, row));
+                pts.push((to.col, row));
+            }
+        }
+        pts.push((to.col, to.row));
+        pts.dedup();
+        return pts;
+    }
     match (horizontal(from.side), horizontal(to.side)) {
         (true, true) => {
             if from.row != to.row {
@@ -300,12 +327,32 @@ mod tests {
         let b = Z.node_rect(&node(4, 2, NodeSize::Small));
         let from = facing_port(&a, b.center().0, b.center().1);
         let to = facing_port(&b, a.center().0, a.center().1);
-        let pts = route(from, to);
+        let pts = route(from, to, Z.reach(from.side));
         assert_eq!(pts.first(), Some(&(from.col, from.row)));
         assert_eq!(pts.last(), Some(&(to.col, to.row)));
         for pair in pts.windows(2) {
             assert!(pair[0].0 == pair[1].0 || pair[0].1 == pair[1].1, "diagonal segment {pair:?}");
         }
+    }
+
+    #[test]
+    fn same_side_ports_bracket_out_half_a_cell() {
+        let a = Z.node_rect(&node(2, 0, NodeSize::Medium));
+        let b = Z.node_rect(&node(2, 3, NodeSize::Medium));
+        let (fl, tl) = (port_on(&a, Side::Left), port_on(&b, Side::Left));
+        let pts = route(fl, tl, Z.reach(Side::Left));
+        assert_eq!(pts, vec![(fl.col, fl.row), (fl.col - 4, fl.row), (fl.col - 4, tl.row), (tl.col, tl.row)]);
+        // Different columns: the bracket clears the wider-reaching Node.
+        let c = Z.node_rect(&node(4, 3, NodeSize::Large));
+        let (fr, tr) = (port_on(&a, Side::Right), port_on(&c, Side::Right));
+        let pts = route(fr, tr, Z.reach(Side::Right));
+        assert_eq!(pts[1].0, fr.col.max(tr.col) + 4);
+        assert_eq!(pts[1].0, pts[2].0);
+        let (ft, tt) = (port_on(&a, Side::Top), port_on(&c, Side::Top));
+        let pts = route(ft, tt, Z.reach(Side::Top));
+        assert_eq!(pts[1].1, ft.row.min(tt.row) - 2);
+        let (fb, tb) = (port_on(&a, Side::Bottom), port_on(&c, Side::Bottom));
+        assert_eq!(route(fb, tb, Z.reach(Side::Bottom))[1].1, fb.row.max(tb.row) + 2);
     }
 
     #[test]

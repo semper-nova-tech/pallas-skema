@@ -56,7 +56,7 @@ pub fn render_manifest_with(
 
 fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
     let nodes: Vec<&Node> = manifest.nodes.iter().collect();
-    let (width, height) = canvas_size(style, &nodes);
+    let (width, height) = canvas_size(style, &nodes, manifest.grid_bounds());
     let color = &style.color;
 
     let mut out = String::new();
@@ -116,7 +116,7 @@ fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
                 .unwrap_or_else(|| facing_port(tr, rect_center(fr), cell)),
         };
         taken.insert((to.id.clone(), dst.side));
-        let pts = route(src, dst);
+        let pts = route(src, dst, cell / 2);
         let d: Vec<String> = pts
             .iter()
             .enumerate()
@@ -227,9 +227,10 @@ fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
     out
 }
 
-fn canvas_size(style: &DiagramStyle, nodes: &[&Node]) -> (i64, i64) {
-    let min_w = style.min_columns * style.cell;
-    let min_h = style.min_rows * style.cell;
+fn canvas_size(style: &DiagramStyle, nodes: &[&Node], bounds: (i64, i64)) -> (i64, i64) {
+    let (columns, rows) = bounds;
+    let min_w = columns * style.cell;
+    let min_h = rows * style.cell;
     let content_w = nodes
         .iter()
         .map(|node| {
@@ -332,9 +333,27 @@ fn facing_port(rect: PxRect, toward: (i64, i64), cell: i64) -> Port {
 }
 
 /// Orthogonal polyline from port to port, mirroring the terminal Editor's routing.
-fn route(from: Port, to: Port) -> Vec<(i64, i64)> {
+/// Two ports on the same side bracket out by `reach` past the outer one.
+fn route(from: Port, to: Port, reach: i64) -> Vec<(i64, i64)> {
     let horizontal = |s: Side| matches!(s, Side::Left | Side::Right);
     let mut pts = vec![(from.x, from.y)];
+    if from.side == to.side {
+        match from.side {
+            Side::Left | Side::Right => {
+                let x = if from.side == Side::Left { from.x.min(to.x) - reach } else { from.x.max(to.x) + reach };
+                pts.push((x, from.y));
+                pts.push((x, to.y));
+            }
+            Side::Top | Side::Bottom => {
+                let y = if from.side == Side::Top { from.y.min(to.y) - reach } else { from.y.max(to.y) + reach };
+                pts.push((from.x, y));
+                pts.push((to.x, y));
+            }
+        }
+        pts.push((to.x, to.y));
+        pts.dedup();
+        return pts;
+    }
     match (horizontal(from.side), horizontal(to.side)) {
         (true, true) => {
             if from.y != to.y {
@@ -502,6 +521,7 @@ mod tests {
 
     fn sample() -> ManifestDocument {
         ManifestDocument {
+            canvas: None,
             nodes: vec![
                 Node {
                     id: "start".into(),
@@ -533,6 +553,25 @@ mod tests {
         // start bottom (92,80) → decide top (192,28): vertical-vertical with a jog.
         assert!(svg.contains(r#"<path d="M92 80 L92 54 L192 54 L192 28""#), "{svg}");
         assert!(svg.contains("<polygon points=\"192,28 "), "arrowhead at the top port");
+    }
+
+    #[test]
+    fn an_explicit_canvas_sets_the_svg_size() {
+        let mut doc = sample();
+        doc.canvas = Some(crate::manifest::CanvasSize { columns: 10, rows: 16 });
+        let svg = build_svg(&doc, crate::style::diagram_style());
+        assert!(svg.contains(r#"width="560" height="896""#), "{svg}");
+    }
+
+    #[test]
+    fn same_side_edges_bracket_out_half_a_cell() {
+        let mut doc = sample();
+        doc.nodes[1].grid_position = GridPosition { x: 0, y: 3 };
+        doc.edges[0].from_side = Some(crate::manifest::Side::Left);
+        doc.edges[0].to_side = Some(crate::manifest::Side::Left);
+        let svg = build_svg(&doc, crate::style::diagram_style());
+        // Both left ports sit at x = 28; the bracket runs half a cell (28) further out.
+        assert!(svg.contains(r#"<path d="M28 56 L0 56 L0 224 L28 224""#), "{svg}");
     }
 
     #[test]

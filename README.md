@@ -116,7 +116,12 @@ skema open-editor --manifest flow.json --svg flow.svg
 - Edges leave and enter at the middle of a side of each Node. Dragging from a
   connection handle fixes the side it leaves by, and the side you drop on is
   where it enters; those sides are saved in the Manifest. Edges made without a
-  handle use the side that faces the other Node.
+  handle use the side that faces the other Node. An Edge that leaves and
+  enters by the same side steps half a cell out, like a bracket.
+- Canvas, above Settings, fixes the canvas size: 16×10 or 24×15 landscape
+  (▭), 10×16 or 15×24 portrait (▯). The choice is saved in the Manifest as
+  `canvas` and the SVG takes that size. A size that would leave a Node outside
+  is dim and refused, and with a canvas set, a move past its edge is refused.
 - Every Node shares one color and the type is not drawn; decisions have rounded
   corners. The selected Node is drawn filled; others are outlined. A Node has a
   `label` and an optional `description`.

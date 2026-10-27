@@ -11,7 +11,7 @@ pub mod validation;
 
 pub use grid::{Grid, GridPosition};
 pub use manifest::{
-    parse_manifest, serialize_manifest, Edge, ManifestDocument, Node, NodeSize, NodeType, Side,
+    parse_manifest, serialize_manifest, CanvasSize, Edge, ManifestDocument, Node, NodeSize, NodeType, Side,
 };
 pub use raster::{render_png, render_png_bytes, render_png_bytes_with, render_png_with, svg_to_png, PNG_SCALE};
 pub use render::{render_manifest, render_manifest_with, render_svg_string, render_svg_string_with};

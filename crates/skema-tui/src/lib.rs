@@ -76,6 +76,12 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                 MouseEventKind::Down(MouseButton::Left) if in_rect(hits.add_button, mouse.column, mouse.row) => {
                     app.press(Button::AddNode);
                 }
+                MouseEventKind::Down(MouseButton::Left)
+                    if hits.canvas_buttons.iter().any(|(r, _)| in_rect(*r, mouse.column, mouse.row)) =>
+                {
+                    let (_, (columns, rows)) = *hits.canvas_buttons.iter().find(|(r, _)| in_rect(*r, mouse.column, mouse.row)).unwrap();
+                    app.set_canvas(columns, rows);
+                }
                 MouseEventKind::Down(MouseButton::Left) if in_rect(hits.settings_button, mouse.column, mouse.row) => {
                     app.toggle_settings();
                 }
@@ -205,32 +211,6 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                         app.link_cursor = surface_point(&view, mouse.column, mouse.row);
                     }
                     app.hover_node = node;
-                }
-                // Right-button drag from one Node to another connects them.
-                MouseEventKind::Down(MouseButton::Right) => {
-                    if let Some(from) = surface_point(&view, mouse.column, mouse.row)
-                        .and_then(|(c, r)| app.node_at_point(&ZOOMS[app.zoom], c, r))
-                    {
-                        app.link_preview = Some((from, None));
-                    }
-                }
-                MouseEventKind::Drag(MouseButton::Right) => {
-                    if let Some((from, _)) = app.link_preview.take() {
-                        let over = surface_point(&view, mouse.column, mouse.row)
-                            .and_then(|(c, r)| app.node_at_point(&ZOOMS[app.zoom], c, r))
-                            .filter(|id| *id != from);
-                        app.link_preview = Some((from, over));
-                    }
-                }
-                MouseEventKind::Up(MouseButton::Right) => {
-                    if let Some((from, _)) = app.link_preview.take() {
-                        let over = surface_point(&view, mouse.column, mouse.row)
-                            .and_then(|(c, r)| app.node_at_point(&ZOOMS[app.zoom], c, r));
-                        match over {
-                            Some(to) if to != from => app.connect_ids(&from, &to, None, None),
-                            _ => {}
-                        }
-                    }
                 }
                 MouseEventKind::Drag(MouseButton::Left) if port_drag => {
                     // Dragging out of a connection point: rubber band follows, target previews.

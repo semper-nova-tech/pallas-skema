@@ -8,7 +8,7 @@ use std::time::SystemTime;
 use crate::clipboard;
 use skema_core::{
     format_text_failure, parse_manifest, render_manifest_with, serialize_manifest, validate_manifest,
-    Edge, GridPosition, ManifestDocument, Node, NodeSize, NodeType, TextFailure,
+    CanvasSize, Edge, GridPosition, ManifestDocument, Node, NodeSize, NodeType, TextFailure,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -165,6 +165,10 @@ pub struct Status {
     pub text: String,
 }
 
+/// Canvas sizes offered in the panel, in Grid cells: standard and large, each
+/// landscape and portrait.
+pub const CANVAS_PRESETS: [(i64, i64); 4] = [(16, 10), (10, 16), (24, 15), (15, 24)];
+
 pub struct App {
     pub manifest_path: PathBuf,
     pub svg_path: PathBuf,
@@ -278,7 +282,7 @@ impl App {
         self.quit_armed = false;
         self.mode = Mode::Normal;
         if !self.manifest_path.exists() {
-            self.manifest = Some(ManifestDocument { nodes: vec![], edges: vec![] });
+            self.manifest = Some(ManifestDocument { canvas: None, nodes: vec![], edges: vec![] });
             self.lifecycle = Lifecycle::ValidEmpty;
             self.selected = None;
             self.info("new Diagram · nothing on disk yet");
@@ -936,6 +940,25 @@ impl App {
         }
     }
 
+    // ----- canvas -----------------------------------------------------------
+    // The preset list belongs to the Editor; only the chosen size goes in the Manifest.
+
+    /// Whether every Node would fit a canvas of this size.
+    pub fn canvas_fits(&self, columns: i64, rows: i64) -> bool {
+        self.manifest.as_ref().is_some_and(|doc| {
+            let candidate = ManifestDocument { canvas: Some(CanvasSize { columns, rows }), ..doc.clone() };
+            validate_manifest(&candidate).is_ok()
+        })
+    }
+
+    /// Fix the canvas to a preset size, through Validation like any edit.
+    pub fn set_canvas(&mut self, columns: i64, rows: i64) {
+        self.try_apply(|doc| {
+            doc.canvas = Some(CanvasSize { columns, rows });
+            Ok(())
+        });
+    }
+
     // ----- settings ---------------------------------------------------------
 
     pub fn toggle_settings(&mut self) {
@@ -1142,6 +1165,24 @@ mod tests {
         assert_eq!(app.selected_node().unwrap().grid_position, GridPosition { x: 3, y: 1 });
         assert!(app.dirty);
         assert_eq!(app.lifecycle, Lifecycle::ValidEditing);
+    }
+
+    #[test]
+    fn canvas_presets_go_through_validation() {
+        let dir = temp_dir("canvas");
+        let mut app = open_with(&dir, &two_nodes());
+        app.select_id("b");
+        app.move_selected(11, 0);
+        assert!(!app.canvas_fits(10, 16), "b at x = 12 is past a 10-column canvas");
+        let before = app.manifest.clone();
+        app.set_canvas(10, 16);
+        assert_eq!(app.manifest, before, "a canvas the Nodes do not fit is refused");
+        assert!(app.status.text.contains("'b' does not fit a 10×16 canvas"), "{}", app.status.text);
+
+        app.set_canvas(16, 10);
+        assert_eq!(app.manifest.as_ref().unwrap().canvas, Some(CanvasSize { columns: 16, rows: 10 }));
+        app.move_selected(1, 0);
+        assert_eq!(app.selected_node().unwrap().grid_position.x, 12, "a move past the canvas is refused");
     }
 
     #[test]

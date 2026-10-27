@@ -6,8 +6,27 @@ use crate::validation::{text_failure, TextFailure};
 /// Parsed Manifest document (wire: manifest).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManifestDocument {
+    /// Fixed canvas size in Grid cells. Absent means the default minimum, grown to fit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas: Option<CanvasSize>,
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
+}
+
+impl ManifestDocument {
+    /// Canvas size in Grid cells: the Manifest's `canvas`, or the style's minimum.
+    pub fn grid_bounds(&self) -> (i64, i64) {
+        let style = crate::style::diagram_style();
+        self.canvas.map_or((style.min_columns, style.min_rows), |c| (c.columns, c.rows))
+    }
+}
+
+/// Canvas size in whole Grid cells, padding included (wire field: canvas).
+/// Every Node box must fit inside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanvasSize {
+    pub columns: i64,
+    pub rows: i64,
 }
 
 /// Labeled box on the Grid (wire field: node).
