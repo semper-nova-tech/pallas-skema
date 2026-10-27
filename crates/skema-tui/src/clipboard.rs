@@ -5,11 +5,14 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 /// Copy a PNG to the clipboard as an image, so chat and document apps paste a
-/// picture. macOS goes through AppleScript; Linux through wl-copy or xclip.
+/// picture. macOS goes through AppleScript; Linux through wl-copy or xclip;
+/// Windows through PowerShell and System.Windows.Forms.
 pub fn copy_png(png: &[u8]) -> Result<&'static str, String> {
     let path = std::env::temp_dir().join(format!("skema-clipboard-{}.png", std::process::id()));
     std::fs::write(&path, png).map_err(|e| format!("cannot stage PNG: {e}"))?;
     let path_str = path.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
+    // PowerShell single-quoted string: a quote is doubled.
+    let ps_path = path.to_string_lossy().replace('\'', "''");
     let attempts: &[(&str, Vec<String>)] = &[
         (
             "osascript",
@@ -23,8 +26,21 @@ pub fn copy_png(png: &[u8]) -> Result<&'static str, String> {
             "xclip",
             vec!["-selection".into(), "clipboard".into(), "-t".into(), "image/png".into(), "-i".into(), path.to_string_lossy().into_owned()],
         ),
+        (
+            "powershell",
+            vec![
+                "-NoProfile".into(),
+                "-STA".into(),
+                "-Command".into(),
+                format!(
+                    "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; \
+                     $img = [System.Drawing.Image]::FromFile('{ps_path}'); \
+                     [System.Windows.Forms.Clipboard]::SetImage($img); $img.Dispose()"
+                ),
+            ],
+        ),
     ];
-    let mut last_err = String::from("no clipboard tool found (osascript, wl-copy, xclip)");
+    let mut last_err = String::from("no clipboard tool found (osascript, wl-copy, xclip, powershell)");
     for (cmd, args) in attempts {
         match Command::new(cmd).args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped()).output() {
             Ok(out) if out.status.success() => {

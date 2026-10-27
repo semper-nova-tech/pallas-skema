@@ -1,10 +1,25 @@
 #!/bin/sh
-# Make sure a skema binary exists. Prefer PATH; otherwise build the repo next to this plugin.
+# Make sure a skema binary exists. Prefer PATH; otherwise download the latest
+# release; otherwise build the repository next to this plugin (contributors).
 set -e
+
+installer="https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.sh"
 
 if command -v skema >/dev/null 2>&1; then
   echo "skema is already installed: $(command -v skema)"
   exit 0
+fi
+if [ -x "$HOME/.local/bin/skema" ]; then
+  echo "skema is already installed: $HOME/.local/bin/skema"
+  exit 0
+fi
+
+if command -v curl >/dev/null 2>&1; then
+  echo "Installing skema from the latest release ..."
+  if curl --proto '=https' --tlsv1.2 -LsSf "$installer" | sh; then
+    exit 0
+  fi
+  echo "Release install failed; trying a source build." >&2
 fi
 
 plugin_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -16,6 +31,6 @@ if [ -f "$repo/Cargo.toml" ] && command -v cargo >/dev/null 2>&1; then
   exit 0
 fi
 
-echo "skema not found on PATH and no Rust workspace next to this plugin." >&2
-echo "Install a Rust toolchain and run 'cargo build --release' in the pallas-skema repo, or put skema on PATH." >&2
+echo "Could not install skema. Run:" >&2
+echo "  curl --proto '=https' --tlsv1.2 -LsSf $installer | sh" >&2
 exit 1

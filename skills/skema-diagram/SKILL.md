@@ -2,8 +2,9 @@
 name: skema-diagram
 description: >-
   Create or change a Pallas Skema diagram by editing its JSON Manifest and
-  rendering the SVG with the skema CLI, and open the terminal Editor in a Herdr
-  pane so a person can arrange it alongside you. Use when the user asks to
+  rendering the SVG with the skema CLI, and open the terminal Editor beside
+  you (a Herdr pane, a tmux split, or a second terminal) so a person can
+  arrange it alongside you. Use when the user asks to
   diagram, sketch a flow, add or move a node, connect steps, or open Skema.
   Do not hand-draw SVG or invent a layout engine; the CLI owns rendering.
 ---
@@ -12,17 +13,25 @@ description: >-
 
 One JSON Manifest is the source of truth for one Diagram. The SVG is a
 generated picture. You change the Manifest; `skema render` validates it and
-writes the SVG. A person may have the same Manifest open in the Editor pane,
+writes the SVG. A person may have the same Manifest open in the Editor,
 which redraws when the file changes.
 
 ## Preflight
 
 ```bash
-command -v skema || ls target/release/skema
+command -v skema || ls ~/.local/bin/skema || ls target/release/skema
 ```
 
-If neither exists, build it: `cargo build --release` in the pallas-skema repo,
-then use `target/release/skema`. Do not continue without the binary.
+Use the first one found. If none exists, tell the user `skema` is missing and
+offer the one-line install, which needs no Rust:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.sh | sh
+```
+
+(or `brew install semper-nova-tech/tap/skema`). Run it only after they agree.
+Inside a pallas-skema checkout, `cargo build --release` also works. Do not
+continue without the binary.
 
 ## Manifest shape
 
@@ -56,8 +65,10 @@ Rules the validator enforces. Design to them instead of discovering them by fail
   Two Edge ends on the same side (`left` to `left`) draw as a bracket that
   steps half a cell out.
 - `canvas` is optional: a fixed size in whole Grid cells. Leave it out and the
-  canvas starts at 16×10 and grows to fit. When it is set, every Node box must
-  fit inside it, padding included, or Validation refuses the Manifest. Keep a
+  canvas starts at 16×10 and grows to fit. The numbers count dots: a Node
+  covers its size rounded to whole cells (small and medium 2×1, large 3×1)
+  plus the closing dot, so on 16×10 a medium Node fits up to x = 13, y = 8.
+  When `canvas` is set, a Node past it makes Validation refuse the Manifest. Keep a
   canvas a person picked in the Editor; to place a Node past it, ask first or
   pick a larger canvas.
 
@@ -70,7 +81,7 @@ them when you place Nodes or add Edges.
   the orchestration flow, the workers) on one row, top to bottom in the order
   things happen. Flows that run in steps read left to right inside their row.
 - **Even steps.** A cell is 56 px; Nodes are 104 (small), 128 (medium), and
-  156 (large) px wide, so a large Node spans about three cells. Step side-by-side
+  156 (large) px wide, centered on 2, 2, and 3 cells. Step side-by-side
   Nodes by 5 columns and stacked rows by 3 or 4. Uneven steps make jogged lines.
 - **Matching sizes on a vertical line.** Nodes that connect top to bottom
   should share an x and a size, so their center lines match and the Edge is
@@ -123,31 +134,51 @@ Renders use the theme the person chose in the Editor (kept in
 `~/.config/skema/theme`), so do not pass `--theme` unless they ask for a
 specific one.
 
-## Open the Editor pane
+## Open the Editor
 
-Only when the user asks to see or arrange the Diagram, and only inside Herdr:
+Open the Editor by default after you create a new Diagram, so the person sees
+it while you work. Skip it when they said not to, when it is already open, or
+for small follow-up edits (an open Editor reloads by itself).
+
+The Editor is a full-screen terminal app: never run `skema open-editor` in your
+own pane or shell. Give it its own pane, tab, or window, using absolute paths:
 
 ```bash
-test "${HERDR_ENV:-}" = 1 && herdr plugin list | grep -q pallas.skema
+skema open-editor --manifest <abs>.json --svg <abs>.svg
 ```
 
-If the plugin is missing: `herdr plugin link <repo>/herdr-plugin`. Then open it
-split beside your own pane, so it lands in the user's current workspace:
+Pick the first host that applies.
+
+**Herdr** (`HERDR_ENV=1`). Open it split beside your own pane:
 
 ```bash
 herdr plugin pane open --plugin pallas.skema --entrypoint editor \
   --target-pane "$HERDR_PANE_ID" --placement split --direction right \
-  --env "SKEMA_MANIFEST=$(realpath <path>.json)" --focus
+  --env "SKEMA_MANIFEST=<abs>.json" --focus
 ```
 
-The pane autosaves: every edit the person makes is written to the Manifest and
-SVG at once, so re-read the file before you edit it again.
+If `herdr plugin list` does not show `pallas.skema`, offer
+`herdr plugin install semper-nova-tech/pallas-skema/herdr-plugin --yes` and
+run it only after the user agrees.
 
-Do not run `skema open-editor` in your own pane; it is a full-screen TUI.
+**tmux** (`TMUX` is set). Split the current window:
 
-## While the pane is open
+```bash
+tmux split-window -h -c "$(dirname <abs>.json)" \
+  "skema open-editor --manifest <abs>.json --svg <abs>.svg"
+```
 
-- Keep editing the file. The pane reloads a clean Editor automatically.
-- If the person has unsaved edits, the pane warns them instead of overwriting.
-  Tell the user you changed the file and that `r` in the pane reloads it.
+**Any other terminal.** Open a new tab or window in the user's terminal app
+(`TERM_PROGRAM` and the OS tell you which) running the command above. If you
+cannot, give the user the command to run in a second tab.
+
+Whichever host runs it, the Editor autosaves: every edit the person makes is
+written to the Manifest and SVG at once, so re-read the file before you edit it
+again.
+
+## While the Editor is open
+
+- Keep editing the file. A clean Editor reloads it automatically.
+- If the person has unsaved edits, the Editor warns them instead of overwriting.
+  Tell the user you changed the file and that `r` in the Editor reloads it.
 - Never edit the SVG. Never put commands or scripts in the Manifest.

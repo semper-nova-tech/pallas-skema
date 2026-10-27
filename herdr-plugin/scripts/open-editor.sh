@@ -54,11 +54,16 @@ bin="${SKEMA_BIN:-}"
 if [ -z "$bin" ] && command -v skema >/dev/null 2>&1; then
   bin=$(command -v skema)
 fi
+# The release installer puts skema in ~/.local/bin, which a Herdr pane's PATH may not include yet.
+if [ -z "$bin" ] && [ -x "$HOME/.local/bin/skema" ]; then
+  bin="$HOME/.local/bin/skema"
+fi
 if [ -z "$bin" ] && [ -x "$plugin_root/../target/release/skema" ]; then
   bin="$plugin_root/../target/release/skema"
 fi
 if [ -z "$bin" ]; then
-  echo "skema binary not found. Run 'cargo build --release' in the pallas-skema repo or put skema on PATH." >&2
+  echo "skema binary not found. Install it with:" >&2
+  echo "  curl --proto '=https' --tlsv1.2 -LsSf https://github.com/semper-nova-tech/pallas-skema/releases/latest/download/skema-installer.sh | sh" >&2
   echo "Press enter to close." >&2
   read -r _ || true
   exit 1

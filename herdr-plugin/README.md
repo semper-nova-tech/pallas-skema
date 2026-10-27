@@ -17,8 +17,9 @@ Or from GitHub once published:
 herdr plugin install semper-nova-tech/pallas-skema/herdr-plugin
 ```
 
-The build step uses `skema` from PATH, or builds the repository next to the
-plugin with `cargo build --release`.
+The build step uses `skema` from PATH. Otherwise it downloads the latest
+release into `~/.local/bin`, and falls back to `cargo build --release` in the
+repository next to the plugin when there is no release to fetch.
 
 ## Open a Diagram
 
