@@ -204,6 +204,9 @@ pub struct App {
     pub autosave: bool,
     /// Editor color theme, remembered in the user's config directory.
     pub theme: crate::canvas::Theme,
+    /// A terminal palette is cached, so Match terminal can be exported. Without
+    /// one the SVG and PNG use Phosphor, and so does the Editor, to match them.
+    pub terminal_palette: bool,
     /// The settings section under the buttons is expanded.
     pub settings_open: bool,
     /// A panel button that was just clicked, shown inverted until the instant passes.
@@ -244,6 +247,7 @@ impl App {
             link_cursor: None,
             autosave: true,
             theme: skema_core::theme::load_theme(),
+            terminal_palette: skema_core::theme::load_terminal_palette().is_some(),
             settings_open: false,
             flash: None,
             zoom: crate::geometry::DEFAULT_ZOOM,
@@ -972,9 +976,14 @@ impl App {
             Ok(()) => String::new(),
             Err(e) => format!(" · not remembered: {e}"),
         };
-        if theme == crate::canvas::Theme::Terminal && skema_core::theme::load_terminal_palette().is_none() {
+        if theme == crate::canvas::Theme::Terminal && !self.terminal_palette {
             self.read_terminal_palette();
         }
+        let note = if self.drawn_theme() != theme {
+            format!("{note} · Phosphor until the terminal reports its colors")
+        } else {
+            note
+        };
         if let Some(doc) = &self.manifest {
             if validate_manifest(doc).is_ok() {
                 let _ = render_manifest_with(doc, &self.svg_path, &skema_core::resolve_style(theme));
@@ -986,12 +995,23 @@ impl App {
     /// Ask the terminal for its colors (OSC 10, 11, and 4) and cache them for exports.
     pub fn read_terminal_palette(&mut self) {
         match crate::termcolors::query_palette() {
-            Some(colors) => {
-                if let Err(e) = skema_core::theme::save_terminal_palette(&colors) {
-                    self.fail(format!("terminal palette read but not cached: {e}"));
-                }
+            Some(colors) => match skema_core::theme::save_terminal_palette(&colors) {
+                Ok(()) => self.terminal_palette = true,
+                Err(e) => self.fail(format!("terminal palette read but not cached: {e}")),
+            },
+            None if !self.terminal_palette => {
+                self.info("the terminal did not report its colors · showing Phosphor until it does")
             }
-            None => self.fail("✗ the terminal did not report its colors · exports use Phosphor until it does"),
+            None => {}
+        }
+    }
+
+    /// The theme actually drawn: Match terminal needs a cached palette, or the
+    /// Editor shows Phosphor, the same colors the SVG and PNG fall back to.
+    pub fn drawn_theme(&self) -> crate::canvas::Theme {
+        match self.theme {
+            crate::canvas::Theme::Terminal if !self.terminal_palette => crate::canvas::Theme::Phosphor,
+            theme => theme,
         }
     }
 
@@ -1382,6 +1402,20 @@ mod tests {
         assert!(app.disk_changed);
         assert_eq!(app.selected_node().unwrap().grid_position.y, 1, "edits kept");
         assert!(app.status.text.contains("changed on disk"));
+    }
+
+    #[test]
+    fn match_terminal_draws_phosphor_until_a_palette_is_cached() {
+        let dir = temp_dir("drawn-theme");
+        let mut app = open_with(&dir, &two_nodes());
+        app.theme = crate::canvas::Theme::Terminal;
+        app.terminal_palette = false;
+        assert_eq!(app.drawn_theme(), crate::canvas::Theme::Phosphor, "same fallback as the SVG and PNG");
+        app.terminal_palette = true;
+        assert_eq!(app.drawn_theme(), crate::canvas::Theme::Terminal);
+        app.theme = crate::canvas::Theme::Nord;
+        app.terminal_palette = false;
+        assert_eq!(app.drawn_theme(), crate::canvas::Theme::Nord);
     }
 
     #[test]

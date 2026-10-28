@@ -195,7 +195,7 @@ pub fn draw(
     connect_from: Option<&str>,
     ghost: Option<Ghost>,
 ) -> Surface {
-    draw_view(doc, zoom, &View { selected, connect_from, ghost, ..View::default() })
+    draw_view(doc, zoom, &View { selected, connect_from, ghost, theme: Theme::Phosphor, ..View::default() })
 }
 
 /// Render the Diagram at a zoom level.
@@ -791,7 +791,7 @@ mod tests {
     #[test]
     fn mouse_connect_preview_is_a_dashed_edge_with_an_arrowhead() {
         let doc = parse_manifest(include_str!("../../../examples/flow.json")).unwrap();
-        let s = draw_view(&doc, &Z, &View { link: Some(("done", "revise")), ..View::default() });
+        let s = draw_view(&doc, &Z, &View { link: Some(("done", "revise")), theme: Theme::Phosphor, ..View::default() });
         let text = s.lines().join("\n");
         assert!(text.contains('┄') || text.contains('┆'), "{text}");
         let done = Z.node_rect(doc.nodes.iter().find(|n| n.id == "done").unwrap());
@@ -806,7 +806,7 @@ mod tests {
     #[test]
     fn hovered_node_gets_a_heavy_outline_and_hovered_edge_a_heavy_line() {
         let doc = parse_manifest(include_str!("../../../examples/flow.json")).unwrap();
-        let s = draw_view(&doc, &Z, &View { hover_node: Some("done"), hover_edge: Some(0), ..View::default() });
+        let s = draw_view(&doc, &Z, &View { hover_node: Some("done"), hover_edge: Some(0), theme: Theme::Phosphor, ..View::default() });
         let done = Z.node_rect(doc.nodes.iter().find(|n| n.id == "done").unwrap());
         assert_eq!(s.get(done.col, done.row).unwrap().ch, '┏');
         let (src, _) = edge_ports(&doc, &Z, &doc.edges[0]).unwrap();
@@ -849,7 +849,7 @@ mod tests {
     #[test]
     fn hovered_node_shows_connection_points_and_a_rubber_band_follows_the_cursor() {
         let doc = parse_manifest(include_str!("../../../examples/flow.json")).unwrap();
-        let s = draw_view(&doc, &Z, &View { show_ports: Some("intake"), ..View::default() });
+        let s = draw_view(&doc, &Z, &View { show_ports: Some("intake"), theme: Theme::Phosphor, ..View::default() });
         let r = Z.node_rect(&doc.nodes[0]);
         let handles = crate::geometry::handles(&r);
         assert_eq!(handles.len(), 4);
@@ -858,7 +858,7 @@ mod tests {
             assert!(r.contains(*col, *row), "handles sit on the box border");
         }
         let cursor = (r.col + r.w + 20, r.row + 1);
-        let s = draw_view(&doc, &Z, &View { connect_from: Some("intake"), link_cursor: Some(cursor), ..View::default() });
+        let s = draw_view(&doc, &Z, &View { connect_from: Some("intake"), link_cursor: Some(cursor), theme: Theme::Phosphor, ..View::default() });
         assert_eq!(s.get(cursor.0, cursor.1).unwrap().ch, '◌');
         assert_eq!(s.get(r.col + r.w + 5, r.row + 1).unwrap().ch, '┄');
         assert_eq!(s.get(r.col + r.w - 1, r.row + 1).unwrap().ch, '●', "source handle is filled");

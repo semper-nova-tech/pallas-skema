@@ -10,11 +10,13 @@ use std::path::PathBuf;
 
 use crate::style::{diagram_style, styled, DiagramStyle, StyleColor};
 
+/// Match terminal is the default: the picture takes the terminal's own ANSI
+/// colors, and falls back to Phosphor wherever they cannot be read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Theme {
-    #[default]
     Phosphor,
     Nord,
+    #[default]
     Terminal,
 }
 
@@ -135,6 +137,7 @@ mod tests {
     fn nord_differs_from_phosphor_and_terminal_falls_back_without_a_palette() {
         let dir = std::env::temp_dir().join(format!("skema-theme-{}", std::process::id()));
         std::env::set_var("SKEMA_CONFIG_DIR", &dir);
+        assert_eq!(load_theme(), Theme::Terminal, "Match terminal is the default");
         assert_ne!(resolve_style(Theme::Nord).color.canvas, resolve_style(Theme::Phosphor).color.canvas);
         assert_eq!(resolve_style(Theme::Terminal).color, diagram_style().color, "no cached palette yet");
         save_terminal_palette(&nord_colors()).unwrap();

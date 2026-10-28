@@ -246,3 +246,35 @@ fn skill_and_plugin_manifests_name_the_binary_version() {
     let herdr = fs::read_to_string(root.join("herdr-plugin/herdr-plugin.toml")).unwrap();
     assert!(herdr.contains(&format!("version = \"{version}\"")), "herdr-plugin.toml must be {version}");
 }
+
+/// With nothing chosen, renders use Match terminal: the cached terminal palette,
+/// or Phosphor when there is none yet. The PNG comes from the same style.
+#[test]
+fn render_defaults_to_the_terminal_palette_and_falls_back_to_phosphor() {
+    let dir = workspace_temp("default-theme");
+    let config = dir.join("config");
+    fs::create_dir_all(&config).unwrap();
+    let manifest = dir.join("manifest.json");
+    fs::copy(golden_manifest(), &manifest).unwrap();
+    let svg = dir.join("diagram.svg");
+    let render = || {
+        let status = Command::new(skema_bin())
+            .env("SKEMA_CONFIG_DIR", &config)
+            .args(["render", "--manifest", manifest.to_str().unwrap(), "--svg", svg.to_str().unwrap()])
+            .args(["--png", dir.join("diagram.png").to_str().unwrap()])
+            .status()
+            .expect("spawn skema");
+        assert!(status.success());
+        fs::read_to_string(&svg).unwrap()
+    };
+    let phosphor = skema_core::style::diagram_style().color.canvas.clone();
+    assert!(render().contains(&format!("fill=\"{phosphor}\"")), "no palette cached: Phosphor");
+
+    let mut palette = skema_core::theme::nord_colors();
+    palette.canvas = "#123456".into();
+    fs::write(config.join("terminal-palette.json"), serde_json::to_string(&palette).unwrap()).unwrap();
+    let svg_text = render();
+    assert!(svg_text.contains("fill=\"#123456\""), "the cached terminal palette");
+    assert!(!svg_text.contains(&format!("fill=\"{phosphor}\"")));
+    let _ = fs::remove_dir_all(&dir);
+}
