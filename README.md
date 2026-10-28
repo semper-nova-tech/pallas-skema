@@ -193,7 +193,10 @@ skema open-editor --manifest flow.json --svg flow.svg
   re-renders on a switch, Copy image uses it, and `skema render` reads the
   same setting so an agent's render matches. For Match terminal the Editor
   asks the terminal for its real colors (OSC 10, 11, and 4) and caches them in
-  `~/.config/skema/terminal-palette.json` for those exports.
+  `~/.config/skema/terminal-palette.json` for those exports. Match terminal is
+  the default. Until a palette is cached, or where the terminal does not
+  answer (Windows), the Editor, SVG, and PNG all use Phosphor, so they always
+  match.
 - The Copy image button, or `y`, puts a PNG of the Diagram on the system
   clipboard as a picture, ready to paste into chat or a document (AppleScript
   on macOS, `wl-copy` or `xclip` on Linux). `Y` copies the SVG markup as text.

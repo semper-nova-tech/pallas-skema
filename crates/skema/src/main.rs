@@ -27,7 +27,7 @@ enum Commands {
         /// Also write a PNG of the same Diagram (2 pixels per SVG unit).
         #[arg(long)]
         png: Option<PathBuf>,
-        /// Color theme: phosphor, nord, or terminal. Default: the theme remembered by the Editor.
+        /// Color theme: phosphor, nord, or terminal. Default: the theme remembered by the Editor, else terminal (Phosphor until its colors are cached).
         #[arg(long)]
         theme: Option<String>,
     },

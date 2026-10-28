@@ -136,8 +136,9 @@ them when you place Nodes or add Edges.
 `skema validate --manifest <path>.json` checks without writing anything. Add
 `--png <path>.png` to `render` when the user wants a picture to paste or attach.
 Renders use the theme the person chose in the Editor (kept in
-`~/.config/skema/theme`), so do not pass `--theme` unless they ask for a
-specific one.
+`~/.config/skema/theme`); with no choice it is Match terminal, which is
+Phosphor until the Editor has cached the terminal's colors. Do not pass
+`--theme` unless they ask for a specific one.
 
 ## Open the Editor
 

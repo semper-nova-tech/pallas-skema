@@ -41,7 +41,7 @@ pub struct Hits {
 }
 
 pub fn draw(frame: &mut Frame, app: &mut App) -> Hits {
-    let pal = palette_for(app.theme);
+    let pal = palette_for(app.drawn_theme());
     let area = frame.area();
     frame.render_widget(Block::default().style(Style::default().bg(pal.panel)), area);
 
@@ -149,7 +149,7 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
                 Mode::Connect { from_side, .. } => *from_side,
                 _ => None,
             },
-            theme: app.theme,
+            theme: app.drawn_theme(),
         },
     );
 
