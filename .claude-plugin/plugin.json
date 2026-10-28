@@ -1,7 +1,7 @@
 {
   "name": "pallas-skema",
   "displayName": "Pallas Skema",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Diagram in tandem with a person: edit a JSON Manifest, render a deterministic SVG, and open the terminal Editor in a Herdr pane.",
   "author": {
     "name": "John Marlett",
