@@ -22,7 +22,7 @@ which redraws when the file changes.
 command -v skema || ls ~/.local/bin/skema || ls target/release/skema
 ```
 
-Use the first one found. This skill needs `skema` 0.2.1 or newer; check with
+Use the first one found. This skill needs `skema` 0.2.2 or newer; check with
 `skema --version`. A binary that rejects `--version` is older than that.
 
 If none exists, or it is older, tell the user and offer the one-line install,

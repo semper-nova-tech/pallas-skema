@@ -128,7 +128,7 @@ manifests, and the "needs `skema` X or newer" line in
 push a matching tag:
 
 ```bash
-git tag v0.2.1 && git push origin v0.2.1
+git tag v0.2.2 && git push origin v0.2.2
 ```
 
 CI builds macOS and Linux (arm64 and x86_64) and Windows (x86_64), publishes a
