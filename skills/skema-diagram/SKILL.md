@@ -186,7 +186,7 @@ them when you place Nodes or add Edges.
 
 `skema validate --manifest <path>.json` checks without writing anything. When
 the user wants a picture to paste or attach: if any Edge pulses, add
-`--gif <path>.gif` (512 px, looping; the PNG cannot show motion) and still look
+`--gif <path>.gif` (as sharp as the PNG, looping; the PNG cannot show motion) and still look
 at a PNG for the layout check; otherwise add `--png <path>.png`. The SVG
 animates by itself in a browser. Report the path of every file written.
 Renders use the theme the person chose in the Editor (kept in

@@ -76,8 +76,8 @@ fn rasterize(tree: &usvg::Tree, width: u32, height: u32) -> Result<tiny_skia::Pi
 }
 
 
-/// Longest side of a GIF in px.
-pub const GIF_MAX_SIDE: u32 = 512;
+/// GIF pixels per SVG unit: the same as the PNG, so both are equally sharp.
+pub const GIF_SCALE: f32 = PNG_SCALE;
 /// Frames in one GIF loop.
 pub const GIF_FRAMES: u32 = 16;
 /// One pulse loop in milliseconds; SVG, GIF, and Editor share it.
@@ -88,29 +88,30 @@ pub fn render_gif_bytes(manifest: &ManifestDocument) -> Result<Vec<u8>, TextFail
     render_gif_bytes_with(manifest, &crate::theme::current_style())
 }
 
-/// Render a Manifest to animated GIF bytes in a given style: 512 px on the
-/// longest side, `GIF_FRAMES` frames 100 ms apart with each pulse placed by Rust
-/// at that time, looping forever. One frame when no Edge pulses. Colors map to a
+/// Render a Manifest to animated GIF bytes in a given style: `GIF_SCALE` × the
+/// SVG size, `GIF_FRAMES` frames 100 ms apart with each pulse placed by Rust at
+/// that time, looping forever. One frame when no Edge pulses. Colors map to a
 /// fixed palette made from the theme, so the bytes are the same every time.
+/// Frames are drawn in parallel; after the first, each stores only the
+/// rectangle that changed.
 pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) -> Result<Vec<u8>, TextFailure> {
     crate::validation::validate_manifest(manifest)?;
     let pulsing = manifest.edges.iter().any(|e| e.pulse_mode() != crate::manifest::Pulse::None);
     let frames = if pulsing { GIF_FRAMES } else { 1 };
     let palette = gif_palette(&style.color);
     let flat: Vec<u8> = palette.iter().flatten().copied().collect();
-    let mut cache: std::collections::HashMap<[u8; 3], u8> = std::collections::HashMap::new();
-    let mut encoder: Option<gif::Encoder<Vec<u8>>> = None;
-    let gif_err = |e: gif::EncodingError| text_failure(format!("cannot encode GIF: {e}"), None);
-    for k in 0..frames {
+
+    // Draw and palette-map every frame, in parallel; order is kept by index.
+    let draw = |k: u32| -> Result<(u32, u32, Vec<u8>), TextFailure> {
         let t_ms = k * PULSE_PERIOD_MS / GIF_FRAMES;
         let svg = crate::render::build_svg_frame(manifest, style, t_ms);
         let tree = parse_svg(svg.as_bytes())?;
         let size = tree.size();
-        let scale = GIF_MAX_SIDE as f32 / size.width().max(size.height());
-        let width = ((size.width() * scale).round() as u32).clamp(1, GIF_MAX_SIDE);
-        let height = ((size.height() * scale).round() as u32).clamp(1, GIF_MAX_SIDE);
+        let width = ((size.width() * GIF_SCALE).round() as u32).clamp(1, u16::MAX as u32);
+        let height = ((size.height() * GIF_SCALE).round() as u32).clamp(1, u16::MAX as u32);
         let pixmap = rasterize(&tree, width, height)?;
-        let indices: Vec<u8> = pixmap
+        let mut cache: std::collections::HashMap<[u8; 3], u8> = std::collections::HashMap::new();
+        let indices = pixmap
             .pixels()
             .iter()
             .map(|p| {
@@ -119,24 +120,60 @@ pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) 
                 *cache.entry(rgb).or_insert_with(|| nearest(&palette, rgb))
             })
             .collect();
-        let enc = match encoder.as_mut() {
-            Some(enc) => enc,
-            None => {
-                let mut enc = gif::Encoder::new(Vec::new(), width as u16, height as u16, &flat).map_err(gif_err)?;
-                enc.set_repeat(gif::Repeat::Infinite).map_err(gif_err)?;
-                encoder.insert(enc)
-            }
+        Ok((width, height, indices))
+    };
+    let drawn: Vec<Result<(u32, u32, Vec<u8>), TextFailure>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..frames).map(|k| scope.spawn(move || draw(k))).collect();
+        handles.into_iter().map(|h| h.join().expect("GIF frame thread")).collect()
+    });
+    let drawn = drawn.into_iter().collect::<Result<Vec<_>, _>>()?;
+
+    let gif_err = |e: gif::EncodingError| text_failure(format!("cannot encode GIF: {e}"), None);
+    let (width, height) = (drawn[0].0, drawn[0].1);
+    let mut enc = gif::Encoder::new(Vec::new(), width as u16, height as u16, &flat).map_err(gif_err)?;
+    enc.set_repeat(gif::Repeat::Infinite).map_err(gif_err)?;
+    let delay = (PULSE_PERIOD_MS / GIF_FRAMES / 10) as u16;
+    let w = width as usize;
+    for (k, (_, _, px)) in drawn.iter().enumerate() {
+        // The first frame is whole; later ones cover only what differs from the
+        // frame before, drawn over it (dispose: keep).
+        let (x0, y0, x1, y1) = if k == 0 {
+            (0, 0, w, height as usize)
+        } else {
+            changed_rect(&drawn[k - 1].2, px, w).unwrap_or((0, 0, 1, 1))
         };
+        let mut buffer = Vec::with_capacity((x1 - x0) * (y1 - y0));
+        for y in y0..y1 {
+            buffer.extend_from_slice(&px[y * w + x0..y * w + x1]);
+        }
         let frame = gif::Frame {
-            width: width as u16,
-            height: height as u16,
-            delay: (PULSE_PERIOD_MS / GIF_FRAMES / 10) as u16,
-            buffer: std::borrow::Cow::Owned(indices),
+            left: x0 as u16,
+            top: y0 as u16,
+            width: (x1 - x0) as u16,
+            height: (y1 - y0) as u16,
+            delay,
+            dispose: gif::DisposalMethod::Keep,
+            buffer: std::borrow::Cow::Owned(buffer),
             ..gif::Frame::default()
         };
         enc.write_frame(&frame).map_err(gif_err)?;
     }
-    encoder.expect("at least one frame").into_inner().map_err(gif_err)
+    enc.into_inner().map_err(gif_err)
+}
+
+/// Bounding box (x0, y0, x1, y1), end-exclusive, of pixels that differ; None when equal.
+fn changed_rect(prev: &[u8], next: &[u8], w: usize) -> Option<(usize, usize, usize, usize)> {
+    let mut b: Option<(usize, usize, usize, usize)> = None;
+    for (i, (a, c)) in prev.iter().zip(next).enumerate() {
+        if a != c {
+            let (x, y) = (i % w, i / w);
+            b = Some(match b {
+                None => (x, y, x + 1, y + 1),
+                Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1)),
+            });
+        }
+    }
+    b
 }
 
 /// A fixed palette from the theme: each color, and 15 anti-aliasing steps from

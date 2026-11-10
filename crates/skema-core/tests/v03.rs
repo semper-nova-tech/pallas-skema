@@ -4,7 +4,7 @@
 use skema_core::style::diagram_style;
 use skema_core::{
     label_warnings_with, parse_manifest, render_gif_bytes_with, render_svg_string_with, ManifestDocument,
-    WarningCode, GIF_FRAMES, GIF_MAX_SIDE,
+    WarningCode, GIF_FRAMES, GIF_SCALE,
 };
 
 const AWS: &str = include_str!("../../../examples/aws-microservices.json");
@@ -112,7 +112,9 @@ fn ac_arrow_visible() {
     let doc = parse_manifest(AWS).unwrap();
     let picture = svg(&doc);
     let polygons = tags(&picture, "polygon");
-    assert_eq!(polygons.len(), doc.edges.len());
+    // One head per Edge, and a second at the source of a two-way (`both`) Edge.
+    let both = doc.edges.iter().filter(|e| e.pulse_mode() == skema_core::Pulse::Both).count();
+    assert_eq!(polygons.len(), doc.edges.len() + both);
     let first_head = polygons[0].0;
     let fill = format!("fill=\"{}\"", diagram_style().color.node_fill);
     let rects = tags(&picture, "rect");
@@ -245,15 +247,23 @@ fn decode(bytes: &[u8]) -> Gif {
     let (width, height) = (d.width(), d.height());
     let mut frames = Vec::new();
     let mut delays = Vec::new();
+    // Frames after the first cover only what changed (dispose: keep), so paint
+    // each over the last to get the whole picture at that time.
+    let mut canvas = vec![0u8; width as usize * height as usize];
     while let Some(f) = d.read_next_frame().unwrap() {
-        frames.push(f.buffer.to_vec());
+        let (fw, left, top) = (f.width as usize, f.left as usize, f.top as usize);
+        for (row, line) in f.buffer.chunks(fw).enumerate() {
+            let at = (top + row) * width as usize + left;
+            canvas[at..at + fw].copy_from_slice(line);
+        }
+        frames.push(canvas.clone());
         delays.push(f.delay);
     }
     assert_eq!(d.repeat(), gif::Repeat::Infinite, "loops forever");
     Gif { width, height, frames, delays }
 }
 
-/// AC-pulse-gif: 16 frames, 512 px on the longest side, the pulse moves, same bytes every time.
+/// AC-pulse-gif: 16 frames at the PNG's 2× scale, the pulse moves, same bytes every time.
 #[test]
 fn ac_pulse_gif() {
     let style = diagram_style();
@@ -262,9 +272,9 @@ fn ac_pulse_gif() {
     assert_eq!(bytes, render_gif_bytes_with(&doc, style).unwrap(), "deterministic");
     let g = decode(&bytes);
     assert_eq!(g.frames.len(), GIF_FRAMES as usize);
-    assert_eq!(g.width.max(g.height) as u32, GIF_MAX_SIDE);
-    // 16 × 10 cells: 896 × 560 → 512 × 320.
-    assert_eq!((g.width, g.height), (512, 320));
+    // 16 × 10 cells: 896 × 560 SVG units → 1792 × 1120 px, the PNG's size.
+    assert_eq!(GIF_SCALE, skema_core::PNG_SCALE);
+    assert_eq!((g.width, g.height), (1792, 1120));
     assert!(g.delays.iter().all(|d| *d == 10), "100 ms per frame");
     assert_ne!(g.frames[2], g.frames[4], "the pulse moves");
     // `both` is a triangle wave: frame k and frame 16 − k show the dash at the same spot.

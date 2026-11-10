@@ -38,7 +38,7 @@ enum Commands {
         /// Color theme: phosphor, nord, or terminal. Default: the theme remembered by the Editor, else terminal (Phosphor until its colors are cached).
         #[arg(long)]
         theme: Option<String>,
-        /// Also write an animated GIF: 512 px on the longest side, 16 frames of 100 ms
+        /// Also write an animated GIF: the same size as the PNG, 16 frames of 100 ms
         /// showing Edge pulses (one frame when nothing pulses).
         #[arg(long)]
         gif: Option<PathBuf>,

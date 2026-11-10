@@ -267,8 +267,8 @@ Personas are unchanged ([PERSONAS.md](../PERSONAS.md)):
     (v1 FR-4). Animation is markup, not a timestamp.
 31. `resvg` doesn't run animation, so the PNG shows no pulse and the static
     Diagram is unchanged.
-32. `render --gif <path>` writes an animated GIF that is 512 px on its longest
-    side, with the other side scaled to match. It draws 16 frames at evenly
+32. `render --gif <path>` writes an animated GIF at the PNG's scale (2× the
+    SVG size), so it is as sharp as the PNG. It draws 16 frames at evenly
     spaced times in the 1.6 s loop (100 ms per frame), with the pulse placed by Rust
     code at that time, not by CSS. Each frame is rasterized with the same
     `resvg` pipeline and fonts, and the GIF loops forever. It works for a
@@ -378,8 +378,10 @@ The keywords are plain shorthands (FR-14). `small` draws the same as `medium`.
 
 ### Q-gif-size — resolved
 
-The GIF is 512 px on its longest side, with 16 frames at 100 ms each, so it
-stays cheap. There are no flags to change this in v0.3.
+The GIF is drawn at the PNG's 2× scale, with 16 frames at 100 ms each. An
+early 512 px cap made text unreadable. Frames are drawn in parallel, and each
+frame after the first stores only the rectangle that changed, so a 24×14
+Canvas is about 1 MB and renders in a few seconds.
 
 ### Q-svg-animation-tech — resolved
 
@@ -424,8 +426,8 @@ warnings and fixes them (SR-5), and `--strict` is for CI.
 - **AC-pulse-svg:** An Edge with `pulse: "both"` gives SVG that animates back
   and forth with CSS in Chrome and Firefox, and stops under reduced motion. Rendering
   twice gives the same bytes.
-- **AC-pulse-gif:** `render --gif` on that Manifest writes a looping GIF that
-  is 512 px on its longest side, with 16 frames where the pulse moves along the
+- **AC-pulse-gif:** `render --gif` on that Manifest writes a looping GIF at
+  the PNG's size, with 16 frames where the pulse moves along the
   Edge. Rendering twice gives the
   same bytes.
 - **AC-pulse-tui:** In the Editor, the pulse moves along the Edge, the pause
