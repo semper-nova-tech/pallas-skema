@@ -94,6 +94,9 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                 MouseEventKind::Down(MouseButton::Left) if in_rect(hits.add_button, mouse.column, mouse.row) => {
                     app.press(Button::AddNode);
                 }
+                MouseEventKind::Down(MouseButton::Left) if in_rect(hits.add_separator_button, mouse.column, mouse.row) => {
+                    app.press(Button::AddSeparator);
+                }
                 MouseEventKind::Down(MouseButton::Left)
                     if hits.canvas_buttons.iter().any(|(r, _)| in_rect(*r, mouse.column, mouse.row)) =>
                 {

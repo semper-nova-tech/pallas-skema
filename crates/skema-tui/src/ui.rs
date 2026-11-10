@@ -30,6 +30,7 @@ pub struct CanvasView {
 pub struct Hits {
     pub canvas: CanvasView,
     pub add_button: Rect,
+    pub add_separator_button: Rect,
     pub copy_button: Rect,
     pub settings_button: Rect,
     /// Theme rows in the expanded settings: (row rectangle, theme).
@@ -67,6 +68,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Hits {
     Hits {
         canvas,
         add_button: panel.add_button,
+        add_separator_button: panel.add_separator_button,
         copy_button: panel.copy_button,
         settings_button: panel.settings_button,
         theme_rows: panel.theme_rows,
@@ -280,6 +282,7 @@ impl Widget for SurfaceView<'_> {
 struct PanelHits {
     copy_button: Rect,
     add_button: Rect,
+    add_separator_button: Rect,
     settings_button: Rect,
     theme_rows: Vec<(Rect, Theme)>,
     canvas_buttons: Vec<(Rect, (i64, i64))>,
@@ -307,9 +310,12 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
         Line::from(""),
         Line::from(vec![Span::raw(" "), Span::styled(button("+ Add node"), style_for(Button::AddNode))]),
         Line::from(""),
+        Line::from(vec![Span::raw(" "), Span::styled(button("╌ Add separator"), style_for(Button::AddSeparator))]),
+        Line::from(""),
     ];
     let copy_button = Rect { x: area.x + 1, y: area.y + 1, width: area.width.saturating_sub(2), height: 1 };
     let add_button = Rect { x: area.x + 1, y: area.y + 3, width: area.width.saturating_sub(2), height: 1 };
+    let add_separator_button = Rect { x: area.x + 1, y: area.y + 5, width: area.width.saturating_sub(2), height: 1 };
 
     // Canvas size presets, two per line: landscape ▭ then portrait ▯. The chosen
     // one is filled; one the Nodes do not fit is dim and refused on click.
@@ -514,7 +520,7 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
         }
         frame.render_widget(Paragraph::new(lines), inner);
     }
-    PanelHits { copy_button, add_button, settings_button, theme_rows, canvas_buttons, edge_rows, copy_menu_rows, motion_row }
+    PanelHits { copy_button, add_button, add_separator_button, settings_button, theme_rows, canvas_buttons, edge_rows, copy_menu_rows, motion_row }
 }
 
 /// The label position and pulse rows of an Edge box, with the keys that cycle them.
@@ -610,6 +616,25 @@ mod tests {
             assert!(rect.y < hits.settings_button.y, "presets sit above Settings");
         }
         assert!(text_at(hits.settings_button).contains("Settings"));
+    }
+
+    #[test]
+    fn add_separator_button_sits_under_add_node_and_starts_adding() {
+        let dir = std::env::temp_dir().join(format!("skema-ui-addsep-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = dir.join("d.json");
+        std::fs::write(&manifest, r#"{"nodes":[],"edges":[]}"#).unwrap();
+        let mut app = crate::app::App::open(&manifest, &dir.join("d.svg"));
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        let mut hits = super::Hits::default();
+        terminal.draw(|frame| hits = super::draw(frame, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let r = hits.add_separator_button;
+        let text: String = (r.x..r.x + r.width).map(|x| buffer[(x, r.y)].symbol().to_string()).collect();
+        assert!(text.contains("Add separator"), "{text:?}");
+        assert!(r.y > hits.add_button.y, "under Add node");
+        app.press(crate::app::Button::AddSeparator);
+        assert!(matches!(app.mode, crate::app::Mode::AddSeparator { start: None }));
     }
 
     #[test]

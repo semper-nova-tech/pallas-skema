@@ -102,7 +102,7 @@ pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) 
     let flat: Vec<u8> = palette.iter().flatten().copied().collect();
 
     // Draw and palette-map every frame, in parallel; order is kept by index.
-    let draw = |k: u32| -> Result<(u32, u32, Vec<u8>), TextFailure> {
+    let draw = |k: u32| -> Result<GifFrame, TextFailure> {
         let t_ms = k * PULSE_PERIOD_MS / GIF_FRAMES;
         let svg = crate::render::build_svg_frame(manifest, style, t_ms);
         let tree = parse_svg(svg.as_bytes())?;
@@ -122,7 +122,7 @@ pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) 
             .collect();
         Ok((width, height, indices))
     };
-    let drawn: Vec<Result<(u32, u32, Vec<u8>), TextFailure>> = std::thread::scope(|scope| {
+    let drawn: Vec<Result<GifFrame, TextFailure>> = std::thread::scope(|scope| {
         let handles: Vec<_> = (0..frames).map(|k| scope.spawn(move || draw(k))).collect();
         handles.into_iter().map(|h| h.join().expect("GIF frame thread")).collect()
     });
@@ -160,6 +160,9 @@ pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) 
     }
     enc.into_inner().map_err(gif_err)
 }
+
+/// One drawn GIF frame: width, height, and palette indices.
+type GifFrame = (u32, u32, Vec<u8>);
 
 /// Bounding box (x0, y0, x1, y1), end-exclusive, of pixels that differ; None when equal.
 fn changed_rect(prev: &[u8], next: &[u8], w: usize) -> Option<(usize, usize, usize, usize)> {

@@ -141,7 +141,10 @@ them when you place Nodes or add Edges.
 - **Separators for boundaries.** A dashed Separator marks a trust or cloud
   boundary ("AWS", "VPC", "public / private"); a solid one marks tiers or
   lanes. Run it through the empty band between rows or columns, never through
-  a Node.
+  a Node. Span only the Nodes it divides, plus one cell: start one cell before
+  the first Node's footprint and end one cell after the last (Nodes at
+  x = 3 to 20 → `from.x` 2, `to.x` 21), not the full canvas. Its label sits
+  at `from`, so a long line pushes the label away from what it names.
 - **Pulses sparingly.** Pulse only flows the person asked to highlight, or the
   few that tell the story: `both` for request and response or two-way traffic,
   `forward` for a one-way stream or a scheduled push. Pulse no more than about

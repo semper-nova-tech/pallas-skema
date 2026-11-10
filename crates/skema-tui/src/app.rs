@@ -152,6 +152,7 @@ pub enum Mode {
 pub enum Button {
     Copy,
     AddNode,
+    AddSeparator,
 }
 
 /// Items of the Copy menu, in menu order.
@@ -1525,6 +1526,7 @@ impl App {
         match button {
             Button::Copy => self.toggle_copy_menu(),
             Button::AddNode => self.add_node(),
+            Button::AddSeparator => self.begin_add_separator(),
         }
     }
 
