@@ -8,25 +8,41 @@ use std::process::{Command, Stdio};
 /// picture. macOS goes through AppleScript; Linux through wl-copy or xclip;
 /// Windows through PowerShell and System.Windows.Forms.
 pub fn copy_png(png: &[u8]) -> Result<&'static str, String> {
-    let path = std::env::temp_dir().join(format!("skema-clipboard-{}.png", std::process::id()));
-    std::fs::write(&path, png).map_err(|e| format!("cannot stage PNG: {e}"))?;
+    copy_image(png, "png", "image/png", "PNGf", true)
+}
+
+/// Copy an animated GIF to the clipboard as `image/gif`: AppleScript's
+/// `«class GIFf»` on macOS, wl-copy or xclip on Linux. Windows has no GIF
+/// clipboard type that keeps the animation, so it always reports failure and
+/// the caller falls back to a file.
+pub fn copy_gif(gif: &[u8]) -> Result<&'static str, String> {
+    if cfg!(windows) {
+        return Err("the Windows clipboard cannot hold an animated GIF".into());
+    }
+    copy_image(gif, "gif", "image/gif", "GIFf", false)
+}
+
+/// Stage `bytes` in a temp file and hand it to the first platform tool that
+/// accepts the media type.
+fn copy_image(bytes: &[u8], ext: &str, mime: &str, mac_class: &str, windows: bool) -> Result<&'static str, String> {
+    let path = std::env::temp_dir().join(format!("skema-clipboard-{}.{ext}", std::process::id()));
+    std::fs::write(&path, bytes).map_err(|e| format!("cannot stage {}: {e}", ext.to_uppercase()))?;
     let path_str = path.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
     // PowerShell single-quoted string: a quote is doubled.
     let ps_path = path.to_string_lossy().replace('\'', "''");
-    let attempts: &[(&str, Vec<String>)] = &[
+    let mut attempts: Vec<(&'static str, Vec<String>)> = vec![
         (
             "osascript",
-            vec![
-                "-e".into(),
-                format!("set the clipboard to (read (POSIX file \"{path_str}\") as «class PNGf»)"),
-            ],
+            vec!["-e".into(), format!("set the clipboard to (read (POSIX file \"{path_str}\") as «class {mac_class}»)")],
         ),
-        ("wl-copy", vec!["--type".into(), "image/png".into(), path.to_string_lossy().into_owned()]),
+        ("wl-copy", vec!["--type".into(), mime.into()]),
         (
             "xclip",
-            vec!["-selection".into(), "clipboard".into(), "-t".into(), "image/png".into(), "-i".into(), path.to_string_lossy().into_owned()],
+            vec!["-selection".into(), "clipboard".into(), "-t".into(), mime.into(), "-i".into(), path.to_string_lossy().into_owned()],
         ),
-        (
+    ];
+    if windows {
+        attempts.push((
             "powershell",
             vec![
                 "-NoProfile".into(),
@@ -38,10 +54,30 @@ pub fn copy_png(png: &[u8]) -> Result<&'static str, String> {
                      [System.Windows.Forms.Clipboard]::SetImage($img); $img.Dispose()"
                 ),
             ],
-        ),
-    ];
-    let mut last_err = String::from("no clipboard tool found (osascript, wl-copy, xclip, powershell)");
-    for (cmd, args) in attempts {
+        ));
+    }
+    let tools: Vec<&str> = attempts.iter().map(|(cmd, _)| *cmd).collect();
+    let mut last_err = format!("no clipboard tool found ({})", tools.join(", "));
+    for (cmd, args) in &attempts {
+        if *cmd == "wl-copy" {
+            // wl-copy copies its arguments as text, so the image goes in on stdin.
+            // It forks to serve the clipboard, so no pipe is left open to wait on.
+            let Ok(mut child) = Command::new(cmd).args(args).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+            else {
+                continue;
+            };
+            let wrote = child.stdin.take().is_some_and(|mut stdin| stdin.write_all(bytes).is_ok());
+            match child.wait() {
+                Ok(status) if wrote && status.success() => {
+                    let _ = std::fs::remove_file(&path);
+                    return Ok(cmd);
+                }
+                _ => {
+                    last_err = format!("{cmd} refused {mime}");
+                    continue;
+                }
+            }
+        }
         match Command::new(cmd).args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped()).output() {
             Ok(out) if out.status.success() => {
                 let _ = std::fs::remove_file(&path);
