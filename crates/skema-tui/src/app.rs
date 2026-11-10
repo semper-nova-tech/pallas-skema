@@ -286,7 +286,7 @@ impl App {
         self.quit_armed = false;
         self.mode = Mode::Normal;
         if !self.manifest_path.exists() {
-            self.manifest = Some(ManifestDocument { canvas: None, nodes: vec![], edges: vec![] });
+            self.manifest = Some(ManifestDocument { canvas: None, nodes: vec![], edges: vec![], separators: vec![] });
             self.lifecycle = Lifecycle::ValidEmpty;
             self.selected = None;
             self.info("new Diagram · nothing on disk yet");
@@ -625,7 +625,7 @@ impl App {
             node.size = match node.size {
                 NodeSize::Small => NodeSize::Medium,
                 NodeSize::Medium => NodeSize::Large,
-                NodeSize::Large => NodeSize::Small,
+                _ => NodeSize::Small,
             };
             Ok(())
         });

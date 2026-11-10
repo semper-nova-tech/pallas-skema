@@ -1,0 +1,27 @@
+{
+  "canvas": { "columns": 24, "rows": 12 },
+  "nodes": [
+    { "id": "client", "label": "Web client", "description": "front-end SPA", "type": "process", "size": "medium", "gridPosition": { "x": 10, "y": 0 } },
+    { "id": "apigw", "label": "API Gateway", "description": "AWS", "type": "process", "size": "medium", "gridPosition": { "x": 10, "y": 3 } },
+    { "id": "authorizer", "label": "Authorizer", "description": "Lambda authorizer", "type": "decision", "size": "medium", "gridPosition": { "x": 16, "y": 3 } },
+    { "id": "svc_a", "label": "Service A", "type": "process", "size": "medium", "gridPosition": { "x": 4, "y": 6 } },
+    { "id": "svc_b", "label": "Service B", "type": "process", "size": "medium", "gridPosition": { "x": 10, "y": 6 } },
+    { "id": "svc_c", "label": "Service C", "description": "search-backed", "type": "process", "size": "medium", "gridPosition": { "x": 16, "y": 6 } },
+    { "id": "search", "label": "Search index", "type": "process", "size": "medium", "gridPosition": { "x": 21, "y": 6 } },
+    { "id": "db", "label": "Shared DB", "type": "process", "size": "medium", "gridPosition": { "x": 10, "y": 9 } },
+    { "id": "cron", "label": "Indexer cron", "description": "scheduled job", "type": "process", "size": "medium", "gridPosition": { "x": 21, "y": 9 } }
+  ],
+  "edges": [
+    { "from": "client", "to": "apigw", "label": "HTTPS" },
+    { "from": "apigw", "to": "authorizer", "label": "authorize" },
+    { "from": "apigw", "to": "svc_a", "fromSide": "bottom", "toSide": "top" },
+    { "from": "apigw", "to": "svc_b", "fromSide": "bottom", "toSide": "top" },
+    { "from": "apigw", "to": "svc_c", "fromSide": "bottom", "toSide": "top" },
+    { "from": "svc_a", "to": "db", "fromSide": "bottom", "toSide": "top" },
+    { "from": "svc_b", "to": "db", "fromSide": "bottom", "toSide": "top" },
+    { "from": "svc_c", "to": "db", "fromSide": "bottom", "toSide": "top" },
+    { "from": "svc_c", "to": "search", "label": "query" },
+    { "from": "cron", "to": "db", "label": "read", "fromSide": "left", "toSide": "right" },
+    { "from": "cron", "to": "search", "label": "index", "fromSide": "top", "toSide": "bottom" }
+  ]
+}

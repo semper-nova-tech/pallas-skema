@@ -112,6 +112,7 @@ fn empty_manifest() -> ManifestDocument {
         canvas: None,
         nodes: vec![],
         edges: vec![],
+        separators: vec![],
     }
 }
 

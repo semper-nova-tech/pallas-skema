@@ -87,3 +87,27 @@ mod tests {
         assert!(render_png_bytes(&doc).is_err());
     }
 }
+
+/// Longest side of a GIF in px.
+pub const GIF_MAX_SIDE: u32 = 512;
+/// Frames in one GIF loop.
+pub const GIF_FRAMES: u32 = 16;
+/// One pulse loop in milliseconds; SVG, GIF, and Editor share it.
+pub const PULSE_PERIOD_MS: u32 = 1600;
+
+/// Render a Manifest to animated GIF bytes in the remembered theme (Validation runs first).
+pub fn render_gif_bytes(manifest: &ManifestDocument) -> Result<Vec<u8>, TextFailure> {
+    render_gif_bytes_with(manifest, &crate::theme::current_style())
+}
+
+/// Render a Manifest to animated GIF bytes in a given style.
+pub fn render_gif_bytes_with(_manifest: &ManifestDocument, _style: &DiagramStyle) -> Result<Vec<u8>, TextFailure> {
+    // STUB: implemented by the render work unit.
+    Err(text_failure("GIF output is not implemented yet", None))
+}
+
+/// Render a Manifest to a GIF file in a given style (Validation runs first).
+pub fn render_gif_with(manifest: &ManifestDocument, gif_path: &Path, style: &DiagramStyle) -> Result<(), TextFailure> {
+    let bytes = render_gif_bytes_with(manifest, style)?;
+    std::fs::write(gif_path, bytes).map_err(|e| text_failure(format!("I/O error: {e}"), None))
+}

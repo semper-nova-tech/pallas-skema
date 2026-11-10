@@ -18,6 +18,8 @@
   "edgeLabelLift": 6,
   "textGap": 2,
   "textPadX": 9,
+  "boxOverhangX": 8,
+  "boxInsetY": 2,
   "nodes": {
     "small": {
       "width": 104,

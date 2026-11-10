@@ -540,6 +540,7 @@ mod tests {
                 },
             ],
             edges: vec![Edge { label: Some("next".into()), ..Edge::new("start", "decide") }],
+            separators: vec![],
         }
     }
 

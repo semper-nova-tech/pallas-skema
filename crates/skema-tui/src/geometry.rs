@@ -77,10 +77,11 @@ impl Zoom {
     }
 
     pub fn node_width(&self, size: NodeSize) -> i64 {
-        match size {
-            NodeSize::Small => self.small,
-            NodeSize::Medium => self.medium,
-            NodeSize::Large => self.large,
+        // Interim: width by footprint columns (TUI work unit replaces this).
+        match size.footprint().0 {
+            1 => self.small,
+            2 => self.medium,
+            _ => self.large,
         }
     }
 
