@@ -22,7 +22,7 @@ which redraws when the file changes.
 command -v skema || ls ~/.local/bin/skema || ls target/release/skema
 ```
 
-Use the first one found. This skill needs `skema` 0.2.2 or newer; check with
+Use the first one found. This skill needs `skema` 0.3.0 or newer; check with
 `skema --version`. A binary that rejects `--version` is older than that.
 
 If none exists, or it is older, tell the user and offer the one-line install,
@@ -45,11 +45,18 @@ continue without the binary.
   "canvas": { "columns": 16, "rows": 10 },
   "nodes": [
     { "id": "intake", "label": "Receive request", "description": "optional longer text",
-      "type": "process", "size": "medium", "gridPosition": { "x": 0, "y": 0 } }
+      "type": "process", "size": "medium", "gridPosition": { "x": 0, "y": 0 } },
+    { "id": "db", "label": "Orders DB", "type": "process",
+      "size": { "columns": 2, "rows": 2 }, "gridPosition": { "x": 5, "y": 0 } }
   ],
   "edges": [
     { "from": "intake", "to": "review", "label": "optional",
-      "fromSide": "right", "toSide": "left" }
+      "fromSide": "right", "toSide": "left",
+      "labelPosition": "auto", "pulse": "forward" }
+  ],
+  "separators": [
+    { "id": "aws", "from": { "x": 0, "y": 2 }, "to": { "x": 15, "y": 2 },
+      "style": "dashed", "label": "AWS" }
   ]
 }
 ```
@@ -59,20 +66,31 @@ Rules the validator enforces. Design to them instead of discovering them by fail
 - `id` is unique and stable. Keep ids when relabeling or moving.
 - `label` is short and required. `description` is optional and shows under the
   label when the box has room; the type is never drawn, so say what matters in these two.
-- `type` is `process`, `decision`, or `note`. `size` is `small`, `medium`, or `large`.
+- `type` is `process`, `decision`, or `note`. It is never drawn; use `process`
+  unless the Node really is a branch point or an annotation.
+- `size` is a Footprint: `{ "columns": c, "rows": r }` with c and r each 1 to 3,
+  or a shorthand: `small` and `medium` are 2×1, `large` is 3×1.
 - `gridPosition` is whole non-negative Grid cells. No pixels, no fractions.
-- One Node per cell. Leave at least two empty cells between Nodes side by side
-  and two rows between Nodes stacked, so boxes and edge labels have room.
+- Footprints may not share a cell; Validation refuses an overlap and names both
+  Nodes. Spacing is yours to keep (see Layout).
 - Every Edge endpoint names an existing Node id. `fromSide` and `toSide`
   (`left`, `right`, `top`, `bottom`) are optional; leave them out and the
   renderer picks the side that faces the other Node. Set them only when a
   specific side matters, or keep ones a person set in the Editor.
   Two Edge ends on the same side (`left` to `left`) draw as a bracket that
   steps half a cell out.
+- `labelPosition` (optional) is `auto` (default), `start`, `middle`, or `end`:
+  which segment of the Edge carries its label.
+- `pulse` (optional) is `none` (default), `forward` (one way), or `both`
+  (back and forth: two-way traffic). A `both` Edge has an arrowhead at each end.
+- `separators` (optional) are lines on Grid lines: `from` and `to` share an x
+  (vertical) or a y (horizontal), `style` is `solid` (default) or `dashed`,
+  `label` is optional. A Separator may not touch a Node footprint; Edges may
+  cross it.
 - `canvas` is optional: a fixed size in whole Grid cells. Leave it out and the
   canvas starts at 16×10 and grows to fit. The numbers count dots: a Node
   covers its size rounded to whole cells (small and medium 2×1, large 3×1)
-  plus the closing dot, so on 16×10 a medium Node fits up to x = 13, y = 8.
+  plus the closing dot, so on 16×10 a 2×1 Node fits up to x = 13, y = 8.
   When `canvas` is set, a Node past it makes Validation refuse the Manifest. Keep a
   canvas a person picked in the Editor; to place a Node past it, ask first or
   pick a larger canvas.
@@ -85,12 +103,24 @@ them when you place Nodes or add Edges.
 - **One layer or stage per row.** Put the parts of one tier (callers and core,
   the orchestration flow, the workers) on one row, top to bottom in the order
   things happen. Flows that run in steps read left to right inside their row.
-- **Even steps.** A cell is 56 px; Nodes are 104 (small), 128 (medium), and
-  156 (large) px wide, centered on 2, 2, and 3 cells. Step side-by-side
-  Nodes by 5 columns and stacked rows by 3 or 4. Uneven steps make jogged lines.
-- **Matching sizes on a vertical line.** Nodes that connect top to bottom
-  should share an x and a size, so their center lines match and the Edge is
-  straight. A medium under a large at the same x jogs a few pixels.
+- **Center by default.** Unless the person placed Nodes themselves, center the
+  Diagram on both axes: equal empty columns left and right, equal empty rows
+  top and bottom, within one cell. Take the footprint bounding box
+  (min x to max x + columns, min y to max y + rows) and shift every Node and
+  Separator by `(canvas columns − 1 − used width) / 2 − min x` (rows the same
+  way). For a symmetric fan-out, put the hub on the center column. Render
+  reports `off-center` when a fixed canvas is lopsided; treat it as a defect.
+- **Footprint by meaning.** 2×1 for a service or step; 2×2 for a data store or
+  queue; 3×1 for a gateway or wide hub; 1×1 for a small marker or an external
+  actor with a label of five characters or fewer; 3×2 or 3×3 for a Node with a
+  long description. Keep one footprint per row unless meaning needs another.
+- **Even steps.** A cell is 56 px; a box is its columns × 56 + 16 px wide and
+  rows × 56 − 4 px tall, centered on its cells. Step side-by-side Nodes by
+  `columns + 3` (5 for 2-wide, 6 for 3-wide) and stacked rows by `rows + 2` or
+  more. Uneven steps make jogged lines.
+- **Width parity on a vertical line.** Nodes that connect top to bottom should
+  share an x center and have the same number of columns (or both odd or both
+  even), so the Edge is straight. A 2-wide under a 3-wide jogs half a cell.
 - **Choose sides when the facing rule would cross something.** Leave
   `fromSide`/`toSide` out for simple neighbors. Pin them when an Edge would
   cut through a box, share a port with another Edge, or double back:
@@ -101,8 +131,21 @@ them when you place Nodes or add Edges.
     The line brackets half a cell out and goes around, not through.
   - Never let two Edges end on the same port of one Node. If a loop and a
     forward Edge both want `delegate`'s top, move one to a bracket on the left.
-- **Leave room for labels.** An Edge label sits on its longest segment. Keep
-  labels to two or three words, and leave the empty band between rows clear.
+- **Label budgets.** About six characters per column fit on a Node label:
+  1 column ≈ 5, 2 ≈ 12, 3 ≈ 18. Longer text goes in `description`, which wraps
+  over the box height. Edge labels: two or three words.
+- **Leave room for labels.** An Edge label sits on its longest segment that no
+  other Edge shares, so fan-out labels each land on their own branch. Set
+  `labelPosition` only when a label still collides. Keep the empty band
+  between rows clear.
+- **Separators for boundaries.** A dashed Separator marks a trust or cloud
+  boundary ("AWS", "VPC", "public / private"); a solid one marks tiers or
+  lanes. Run it through the empty band between rows or columns, never through
+  a Node.
+- **Pulses sparingly.** Pulse only flows the person asked to highlight, or the
+  few that tell the story: `both` for request and response or two-way traffic,
+  `forward` for a one-way stream or a scheduled push. Pulse no more than about
+  a third of the Edges.
 - **Pick a canvas for a finished Diagram.** 24×15 suits a three-tier
   architecture; 16×10 suits a short flow. Portrait (10×16, 15×24) suits a tall
   pipeline.
@@ -119,6 +162,13 @@ them when you place Nodes or add Edges.
    means Validation refused it; stderr names the rule and location. Fix the
    Manifest and render again. A refused render leaves the old SVG untouched, so
    never describe the SVG as updated after a failure.
+
+   Then read stderr for Label warnings, even on exit 0:
+   `warning[label-truncated]` (text was shortened), `warning[label-overlap]`
+   (a label sits on a box or another label), `warning[off-center]`. Fix each
+   one and render again; `--warnings=json` gives the same list as JSON. Never
+   report a Diagram with a warning you have not fixed or explained. Do not
+   pass `--strict`; that flag is for CI.
 4. Confirm the change landed with `grep aria-label <path>.svg`, which lists
    every Node label in the SVG.
 5. Look at it. Render a PNG to a scratch path (not next to the Manifest unless
@@ -127,14 +177,18 @@ them when you place Nodes or add Edges.
    skema render --manifest <path>.json --svg <path>.svg --png <scratch>/check.png
    ```
    Check for lines through boxes, two arrowheads on one port, Edges running
-   along each other, and labels on top of lines or boxes. Fix each with the
+   along each other, labels on top of lines or boxes, and that every Edge ends
+   in a visible arrowhead. Fix each with the
    Layout rules and render again. Expect a second pass on any new Diagram of
    more than a few Nodes; do not report a Diagram you have not looked at.
 6. Report the Nodes and Edges you changed, the Validation outcome, and both
    file paths.
 
-`skema validate --manifest <path>.json` checks without writing anything. Add
-`--png <path>.png` to `render` when the user wants a picture to paste or attach.
+`skema validate --manifest <path>.json` checks without writing anything. When
+the user wants a picture to paste or attach: if any Edge pulses, add
+`--gif <path>.gif` (512 px, looping; the PNG cannot show motion) and still look
+at a PNG for the layout check; otherwise add `--png <path>.png`. The SVG
+animates by itself in a browser. Report the path of every file written.
 Renders use the theme the person chose in the Editor (kept in
 `~/.config/skema/theme`); with no choice it is Match terminal, which is
 Phosphor until the Editor has cached the terminal's colors. Do not pass

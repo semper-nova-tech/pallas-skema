@@ -196,10 +196,11 @@ Personas are unchanged ([PERSONAS.md](../PERSONAS.md)):
 
 10. Every arrowhead is fully visible. No Node label, label background, Node
     box, or Separator is painted over any part of an arrowhead.
-11. A Node label's background rectangle never covers a port where an Edge
-    attaches. If the label would cross a used top port, the label moves left so
-    it ends at least 4 px before the port. If it still doesn't fit, it is
-    shortened (with a Label warning, FR-1).
+11. When an Edge ends at a top port, comes down from above, and the port's x
+    falls inside that Node's label background, the Edge stops at the top of
+    the label background and the arrowhead tip sits there, pointing at the
+    label. The label is never moved or shortened for this. Arrowheads are
+    painted last.
 12. The Editor follows the same rule. An arrowhead glyph is never replaced by
     a label character.
 
@@ -224,9 +225,9 @@ Personas are unchanged ([PERSONAS.md](../PERSONAS.md)):
     columns has its top and bottom ports half a cell away from those of a Node
     with an even number of columns. SR-2 tells the Agent how to avoid jogged
     lines.
-18. Descriptions wrap over the full interior height. A 1-row Node shows at
-    most one line of description, a 2-row Node about three, and a 3-row Node
-    about five. Anything that doesn't fit is shortened with a Label warning.
+18. Descriptions wrap over the full interior height: at most `2 × rows − 1`
+    lines (1, 3, or 5). Anything that doesn't fit is shortened with a Label
+    warning.
 19. The Editor can resize a selected Node between 1×1 and 3×3, using keys and
     the panel. It refuses a resize that would fail Validation, as it does for
     moves (v1 FR-12).

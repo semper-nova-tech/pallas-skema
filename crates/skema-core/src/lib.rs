@@ -1,6 +1,7 @@
 //! Rust core for Pallas Skema v1: Manifest model, Grid, Validation, and Render.
 
 pub mod grid;
+mod layout;
 pub mod manifest;
 pub mod raster;
 pub mod render;

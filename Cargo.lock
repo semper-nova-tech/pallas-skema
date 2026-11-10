@@ -1103,6 +1103,7 @@ dependencies = [
 name = "skema-core"
 version = "0.1.0"
 dependencies = [
+ "gif",
  "resvg",
  "serde",
  "serde_json",

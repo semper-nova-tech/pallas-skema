@@ -5,8 +5,8 @@ use std::path::Path;
 
 pub use handoff::EditorJsonHandoff;
 use skema_core::{
-    format_text_failure, parse_manifest, render_manifest, serialize_manifest, validate_manifest,
-    ManifestDocument, TextFailure,
+    format_text_failure, label_warnings_with, parse_manifest, render_manifest, serialize_manifest, validate_manifest,
+    DiagramStyle, LabelWarning, ManifestDocument, TextFailure,
 };
 
 /// CLI subcommand inputs (wire model: CliInvocation).
@@ -54,6 +54,88 @@ pub fn run_render_with(manifest_path: &Path, svg_path: &Path, style: &skema_core
     let json = read_manifest_text(manifest_path)?;
     let manifest = parse_manifest(&json)?;
     skema_core::render_manifest_with(&manifest, svg_path, style).map(|_| ())
+}
+
+/// How Label warnings are written to stderr (`--warnings`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WarningFormat {
+    /// One `warning[code] ...` line per warning; nothing when there are none.
+    #[default]
+    Text,
+    /// One JSON array of `{code, kind, id, text, drawn, fits}`, `[]` when there are none.
+    Json,
+}
+
+/// Label warning handling shared by `render` and `validate`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct WarningOptions {
+    pub format: WarningFormat,
+    /// Any warning fails the command and nothing is written.
+    pub strict: bool,
+}
+
+/// Files `skema render` writes.
+#[derive(Debug, Clone, Copy)]
+pub struct RenderOutputs<'a> {
+    pub svg: &'a Path,
+    pub png: Option<&'a Path>,
+    pub gif: Option<&'a Path>,
+}
+
+/// Warnings as stderr text in the chosen format, or None when there is nothing to print.
+pub fn format_warnings(warnings: &[LabelWarning], format: WarningFormat) -> Option<String> {
+    match format {
+        WarningFormat::Json => Some(serde_json::to_string(warnings).expect("warnings serialize")),
+        WarningFormat::Text if warnings.is_empty() => None,
+        WarningFormat::Text => Some(warnings.iter().map(LabelWarning::line).collect::<Vec<_>>().join("\n")),
+    }
+}
+
+/// Parse and validate, then compute and print the Label warnings. With
+/// `strict`, any warning is a failure.
+fn checked_manifest(
+    manifest_path: &Path,
+    style: &DiagramStyle,
+    opts: WarningOptions,
+) -> Result<(ManifestDocument, Vec<LabelWarning>), TextFailure> {
+    let manifest = parse_manifest(&read_manifest_text(manifest_path)?)?;
+    validate_manifest(&manifest)?;
+    let warnings = label_warnings_with(&manifest, style);
+    if let Some(text) = format_warnings(&warnings, opts.format) {
+        eprintln!("{text}");
+    }
+    if opts.strict && !warnings.is_empty() {
+        let n = warnings.len();
+        return Err(TextFailure {
+            message: format!("--strict: {n} label warning{} (no output written)", if n == 1 { "" } else { "s" }),
+            location: None,
+        });
+    }
+    Ok((manifest, warnings))
+}
+
+/// `skema validate`: Validation, then Label warnings on stderr.
+pub fn run_validate_with(manifest_path: &Path, opts: WarningOptions) -> Result<Vec<LabelWarning>, TextFailure> {
+    checked_manifest(manifest_path, &skema_core::current_style(), opts).map(|(_, w)| w)
+}
+
+/// `skema render`: Validation, Label warnings on stderr, then the SVG and any
+/// PNG and GIF. A Validation failure, or any warning under `--strict`, writes nothing.
+pub fn run_render_outputs(
+    manifest_path: &Path,
+    outputs: RenderOutputs,
+    style: &DiagramStyle,
+    opts: WarningOptions,
+) -> Result<Vec<LabelWarning>, TextFailure> {
+    let (manifest, warnings) = checked_manifest(manifest_path, style, opts)?;
+    skema_core::render_manifest_with(&manifest, outputs.svg, style)?;
+    if let Some(png) = outputs.png {
+        skema_core::render_png_with(&manifest, png, style)?;
+    }
+    if let Some(gif) = outputs.gif {
+        skema_core::render_gif_with(&manifest, gif, style)?;
+    }
+    Ok(warnings)
 }
 
 /// `--theme` value to a style: a named theme, or the remembered one when absent.
