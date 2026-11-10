@@ -286,3 +286,14 @@ fn ac_pulse_gif() {
     let invalid = parse_manifest(r#"{"nodes":[],"edges":[{"from":"a","to":"b"}]}"#).unwrap();
     assert!(render_gif_bytes_with(&invalid, style).is_err());
 }
+
+/// A cancelled GIF render stops and returns nothing; an uncancelled one matches.
+#[test]
+fn gif_render_can_be_cancelled() {
+    use std::sync::atomic::AtomicBool;
+    let style = diagram_style();
+    let doc = pulsing(r#","pulse":"forward""#);
+    assert_eq!(skema_core::render_gif_bytes_cancellable(&doc, style, &AtomicBool::new(true)).unwrap(), None);
+    let full = skema_core::render_gif_bytes_cancellable(&doc, style, &AtomicBool::new(false)).unwrap();
+    assert_eq!(full, Some(render_gif_bytes_with(&doc, style).unwrap()));
+}

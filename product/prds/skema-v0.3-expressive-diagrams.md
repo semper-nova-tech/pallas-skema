@@ -298,12 +298,14 @@ Personas are unchanged ([PERSONAS.md](../PERSONAS.md)):
     `y` and `Y` keep their meanings, and `g` copies the GIF.
 40. Every Copy action saves first, so the copied picture matches the Manifest,
     as today.
-41. Every Editor write of the SVG (save, autosave, theme change) also
-    re-renders a `.png` or `.gif` with the same name beside the SVG, when that
-    file already exists, in the current theme. The PNG renders at once; the GIF
-    renders in the background and only the newest render is written. A GIF is
-    never rendered when no Edge pulses. Copying a GIF also writes it beside the
-    SVG, so it can be dragged into apps that won't paste one.
+41. Every Editor write of the SVG (save, autosave, theme change) marks a
+    `.png` or `.gif` with the same name beside the SVG stale, when that file
+    already exists. They re-render once, 400 ms after the last change, on one
+    background job in the current theme; a newer change cancels a render in
+    flight (checked between GIF frames), and files are written through a temp
+    file and rename. A GIF is never rendered when no Edge pulses. Copying a GIF
+    also writes it beside the SVG, so it can be dragged into apps that won't
+    paste one.
 
 ## Skill rules (`skills/skema-diagram/SKILL.md`)
 

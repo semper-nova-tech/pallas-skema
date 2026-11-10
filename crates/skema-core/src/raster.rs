@@ -95,6 +95,20 @@ pub fn render_gif_bytes(manifest: &ManifestDocument) -> Result<Vec<u8>, TextFail
 /// Frames are drawn in parallel; after the first, each stores only the
 /// rectangle that changed.
 pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) -> Result<Vec<u8>, TextFailure> {
+    let never = std::sync::atomic::AtomicBool::new(false);
+    Ok(render_gif_bytes_cancellable(manifest, style, &never)?.expect("never cancelled"))
+}
+
+/// Like `render_gif_bytes_with`, but stops early and returns `Ok(None)` once
+/// `cancel` is set. Checked before each frame is drawn and before each is encoded,
+/// so a superseded render costs at most the frames already in flight.
+pub fn render_gif_bytes_cancellable(
+    manifest: &ManifestDocument,
+    style: &DiagramStyle,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<Option<Vec<u8>>, TextFailure> {
+    use std::sync::atomic::Ordering;
+    let cancelled = || cancel.load(Ordering::Relaxed);
     crate::validation::validate_manifest(manifest)?;
     let pulsing = manifest.edges.iter().any(|e| e.pulse_mode() != crate::manifest::Pulse::None);
     let frames = if pulsing { GIF_FRAMES } else { 1 };
@@ -102,13 +116,19 @@ pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) 
     let flat: Vec<u8> = palette.iter().flatten().copied().collect();
 
     // Draw and palette-map every frame, in parallel; order is kept by index.
-    let draw = |k: u32| -> Result<GifFrame, TextFailure> {
+    let draw = |k: u32| -> Result<Option<GifFrame>, TextFailure> {
+        if cancelled() {
+            return Ok(None);
+        }
         let t_ms = k * PULSE_PERIOD_MS / GIF_FRAMES;
         let svg = crate::render::build_svg_frame(manifest, style, t_ms);
         let tree = parse_svg(svg.as_bytes())?;
         let size = tree.size();
         let width = ((size.width() * GIF_SCALE).round() as u32).clamp(1, u16::MAX as u32);
         let height = ((size.height() * GIF_SCALE).round() as u32).clamp(1, u16::MAX as u32);
+        if cancelled() {
+            return Ok(None);
+        }
         let pixmap = rasterize(&tree, width, height)?;
         let mut cache: std::collections::HashMap<[u8; 3], u8> = std::collections::HashMap::new();
         let indices = pixmap
@@ -120,13 +140,15 @@ pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) 
                 *cache.entry(rgb).or_insert_with(|| nearest(&palette, rgb))
             })
             .collect();
-        Ok((width, height, indices))
+        Ok(Some((width, height, indices)))
     };
-    let drawn: Vec<Result<GifFrame, TextFailure>> = std::thread::scope(|scope| {
+    let drawn: Vec<Result<Option<GifFrame>, TextFailure>> = std::thread::scope(|scope| {
         let handles: Vec<_> = (0..frames).map(|k| scope.spawn(move || draw(k))).collect();
         handles.into_iter().map(|h| h.join().expect("GIF frame thread")).collect()
     });
-    let drawn = drawn.into_iter().collect::<Result<Vec<_>, _>>()?;
+    let Some(drawn) = drawn.into_iter().collect::<Result<Option<Vec<_>>, _>>()? else {
+        return Ok(None);
+    };
 
     let gif_err = |e: gif::EncodingError| text_failure(format!("cannot encode GIF: {e}"), None);
     let (width, height) = (drawn[0].0, drawn[0].1);
@@ -135,6 +157,9 @@ pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) 
     let delay = (PULSE_PERIOD_MS / GIF_FRAMES / 10) as u16;
     let w = width as usize;
     for (k, (_, _, px)) in drawn.iter().enumerate() {
+        if cancelled() {
+            return Ok(None);
+        }
         // The first frame is whole; later ones cover only what differs from the
         // frame before, drawn over it (dispose: keep).
         let (x0, y0, x1, y1) = if k == 0 {
@@ -158,7 +183,7 @@ pub fn render_gif_bytes_with(manifest: &ManifestDocument, style: &DiagramStyle) 
         };
         enc.write_frame(&frame).map_err(gif_err)?;
     }
-    enc.into_inner().map_err(gif_err)
+    enc.into_inner().map(Some).map_err(gif_err)
 }
 
 /// One drawn GIF frame: width, height, and palette indices.
