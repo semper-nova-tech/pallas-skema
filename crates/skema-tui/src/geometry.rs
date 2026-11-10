@@ -12,23 +12,23 @@ use skema_core::{Node, NodeSize};
 pub struct Zoom {
     pub cell_w: i64,
     pub cell_h: i64,
-    /// Node box height in rows. 1 draws a bracketed single row; 3 or more draws a box.
+    /// Height in rows of a one-row Footprint. 1 draws a bracketed single row; 3 or
+    /// more draws a box. Each extra Footprint row adds `cell_h`.
     pub node_h: i64,
-    pub small: i64,
-    pub medium: i64,
-    pub large: i64,
+    /// Characters a box reaches past its span on each side (the SVG's overhang).
+    pub overhang: i64,
     pub pad_x: i64,
     pub pad_y: i64,
 }
 
-/// Zoom levels from overview to large. Node widths keep the SVG's proportions
-/// (about 1.9, 2.3, and 2.8 cells). They are odd so a box centers exactly
-/// between the dots of the cells it covers, as in the SVG.
+/// Zoom levels from overview to large. A box spans its Footprint columns from dot
+/// to dot plus `overhang` each side, like the SVG's box overhang. Widths are odd
+/// so a box centers exactly between the dots of the cells it covers.
 pub const ZOOMS: [Zoom; 4] = [
-    Zoom { cell_w: 4, cell_h: 2, node_h: 1, small: 7, medium: 9, large: 11, pad_x: 1, pad_y: 1 },
-    Zoom { cell_w: 6, cell_h: 3, node_h: 1, small: 11, medium: 13, large: 17, pad_x: 2, pad_y: 1 },
-    Zoom { cell_w: 8, cell_h: 4, node_h: 3, small: 13, medium: 17, large: 21, pad_x: 2, pad_y: 1 },
-    Zoom { cell_w: 12, cell_h: 6, node_h: 5, small: 21, medium: 27, large: 33, pad_x: 3, pad_y: 1 },
+    Zoom { cell_w: 4, cell_h: 2, node_h: 1, overhang: 0, pad_x: 1, pad_y: 1 },
+    Zoom { cell_w: 6, cell_h: 3, node_h: 1, overhang: 0, pad_x: 2, pad_y: 1 },
+    Zoom { cell_w: 8, cell_h: 4, node_h: 3, overhang: 0, pad_x: 2, pad_y: 1 },
+    Zoom { cell_w: 12, cell_h: 6, node_h: 5, overhang: 1, pad_x: 3, pad_y: 1 },
 ];
 
 pub const DEFAULT_ZOOM: usize = 2;
@@ -76,13 +76,16 @@ impl Zoom {
         }
     }
 
+    /// Box width in characters: the Footprint columns dot to dot, plus the overhang.
     pub fn node_width(&self, size: NodeSize) -> i64 {
-        // Interim: width by footprint columns (TUI work unit replaces this).
-        match size.footprint().0 {
-            1 => self.small,
-            2 => self.medium,
-            _ => self.large,
-        }
+        let columns = size.footprint().0.max(1);
+        columns * self.cell_w + 1 + 2 * self.overhang
+    }
+
+    /// Box height in rows: one row's height, plus a whole cell per extra Footprint row.
+    pub fn node_height(&self, size: NodeSize) -> i64 {
+        let rows = size.footprint().1.max(1);
+        self.node_h + (rows - 1) * self.cell_h
     }
 
     /// Character position of a Grid cell's dot, its top-left corner.
@@ -110,10 +113,17 @@ impl Zoom {
     pub fn box_rect(&self, x: i64, y: i64, size: NodeSize) -> Rect {
         let (sw, sh) = node_span(diagram_style(), size);
         let (dot_col, dot_row) = self.cell_origin(x, y);
-        let (w, h) = (self.node_width(size), self.node_h);
+        let (w, h) = (self.node_width(size), self.node_height(size));
         let col = dot_col + 1 + (sw * self.cell_w - 1 - w).div_euclid(2);
         let row = dot_row + 1 + (sh * self.cell_h - 1 - h).div_euclid(2);
         Rect { col, row, w, h }
+    }
+
+    /// The Grid point (a dot) nearest a character position, never negative.
+    pub fn nearest_point(&self, col: i64, row: i64) -> (i64, i64) {
+        let x = ((col - self.pad_x) as f64 / self.cell_w as f64).round().max(0.0) as i64;
+        let y = ((row - self.pad_y) as f64 / self.cell_h as f64).round().max(0.0) as i64;
+        (x, y)
     }
 
     /// Drag distance in whole Grid cells: the snap rule for the mouse.
@@ -319,7 +329,7 @@ mod tests {
     #[test]
     fn ports_sit_at_side_midpoints_just_outside_the_box() {
         let rect = Z.node_rect(&node(1, 1, NodeSize::Medium));
-        // Dots at (10, 5) and (26, 9); the medium box overhangs both dot columns by one.
+        // Dots at (10, 5) and (26, 9); the 2-wide box runs dot to dot.
         assert_eq!(rect, Rect { col: 10, row: 6, w: 17, h: 3 });
         let [left, right, top, bottom] = ports(&rect);
         assert_eq!((left.col, left.row), (9, 7));
@@ -393,6 +403,37 @@ mod tests {
             let (cols, rows) = z.surface_size(&[], 16, 10);
             let (last_col, last_row) = z.cell_origin(15, 9);
             assert_eq!((cols - 1 - last_col, rows - 1 - last_row), (z.pad_x, z.pad_y), "even margins");
+        }
+    }
+
+    #[test]
+    fn footprint_boxes_cover_their_cells_from_1x1_to_3x3() {
+        // Default zoom: cell 8 x 4, one-row height 3. Dots of cell (1, 1) at (10, 5).
+        let cases = [
+            ((1, 1), Rect { col: 10, row: 6, w: 9, h: 3 }),
+            ((2, 2), Rect { col: 10, row: 6, w: 17, h: 7 }),
+            ((3, 3), Rect { col: 10, row: 6, w: 25, h: 11 }),
+            ((3, 1), Rect { col: 10, row: 6, w: 25, h: 3 }),
+            ((1, 3), Rect { col: 10, row: 6, w: 9, h: 11 }),
+        ];
+        for ((c, r), want) in cases {
+            let rect = Z.node_rect(&node(1, 1, NodeSize::cells(c, r)));
+            assert_eq!(rect, want, "{c}x{r}");
+            // Centered vertically between the top and bottom dots of the span.
+            let (_, top_dot) = Z.cell_origin(1, 1);
+            let bottom_dot = top_dot + r * Z.cell_h;
+            assert_eq!(rect.row - top_dot, bottom_dot - (rect.row + rect.h - 1), "{c}x{r} vertical centering");
+        }
+        // Keywords draw exactly like the matching footprint.
+        assert_eq!(Z.node_rect(&node(0, 0, NodeSize::Small)), Z.node_rect(&node(0, 0, NodeSize::cells(2, 1))));
+        assert_eq!(Z.node_rect(&node(0, 0, NodeSize::Large)), Z.node_rect(&node(0, 0, NodeSize::cells(3, 1))));
+        // Every zoom keeps tall boxes inside their span.
+        for z in ZOOMS {
+            for r in 1..=3 {
+                let rect = z.node_rect(&node(0, 0, NodeSize::cells(2, r)));
+                let (_, top_dot) = z.cell_origin(0, 0);
+                assert!(rect.row > top_dot && rect.row + rect.h - 1 < top_dot + r * z.cell_h, "{z:?} rows {r}");
+            }
         }
     }
 
