@@ -229,12 +229,6 @@ pub fn save_motion_in(dir: &Path, paused: bool) -> Result<(), String> {
     fs::write(motion_file(dir), if paused { "paused\n" } else { "on\n" }).map_err(|e| e.to_string())
 }
 
-/// Where a GIF goes when the clipboard cannot hold one: beside the Manifest.
-pub fn gif_fallback_path(manifest_path: &Path) -> PathBuf {
-    let stem = manifest_path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "diagram".into());
-    manifest_path.with_file_name(format!("{stem}.gif"))
-}
-
 pub fn label_position_name(p: LabelPosition) -> &'static str {
     match p {
         LabelPosition::Auto => "auto",
@@ -333,6 +327,10 @@ pub struct App {
     pub warning_index: usize,
     /// The Copy menu is open, with this item highlighted.
     pub copy_menu: Option<CopyItem>,
+    /// A GIF beside the SVG is re-rendering in the background; it reports here.
+    gif_job: Option<std::sync::mpsc::Receiver<Result<PathBuf, String>>>,
+    /// Bumped for every GIF job; a job writes only while it is still the newest.
+    gif_generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 const KEYS_HINT: &str = "tab next  ←↑↓→ move  ⏎ edit  a add  c connect, then click  [ ] { } size  S separator  x delete  + - zoom  0 fit  C copy menu  y png  Y svg  g gif  m motion  s save  q quit";
@@ -377,6 +375,8 @@ impl App {
             warnings: Vec::new(),
             warning_index: 0,
             copy_menu: None,
+            gif_job: None,
+            gif_generation: Default::default(),
         };
         app.reload();
         app
@@ -1281,11 +1281,102 @@ impl App {
         self.quit_armed = false;
         self.lifecycle = Lifecycle::ValidSaved;
         let how = if self.autosave { "autosaved" } else { "saved" };
+        let pictures = self.refresh_pictures(&style);
         self.ok(format!(
-            "✓ {how} {} and {}",
+            "✓ {how} {} and {}{pictures}",
             file_name(&self.manifest_path),
             file_name(&self.svg_path)
         ));
+    }
+
+    /// Where the picture of kind `ext` (`png`, `gif`) lives: beside the SVG, same name.
+    pub fn picture_path(&self, ext: &str) -> PathBuf {
+        self.svg_path.with_extension(ext)
+    }
+
+    /// Bring the PNG and GIF beside the SVG up to date with the Manifest and
+    /// theme, but only those that already exist. The PNG renders now; the GIF
+    /// renders in the background and only the newest render is written.
+    /// Returns a note for the status line.
+    pub fn refresh_pictures(&mut self, style: &skema_core::DiagramStyle) -> String {
+        let Some(doc) = self.manifest.clone() else { return String::new() };
+        if validate_manifest(&doc).is_err() {
+            return String::new();
+        }
+        let mut note = String::new();
+        let png = self.picture_path("png");
+        if png.exists() {
+            note.push_str(&match skema_core::render_png_with(&doc, &png, style) {
+                Ok(()) => format!(" and {}", file_name(&png)),
+                Err(f) => format!(" · PNG not updated: {}", format_text_failure(&f)),
+            });
+        }
+        // A GIF only shows motion: with no pulsing Edge there is nothing to render.
+        let gif = self.picture_path("gif");
+        if gif.exists() {
+            if doc.edges.iter().any(|e| e.pulse_mode() != Pulse::None) {
+                self.start_gif(doc, style.clone(), gif);
+                note.push_str(" · GIF updating");
+            } else {
+                note.push_str(" · no pulses, GIF left as is");
+            }
+        }
+        note
+    }
+
+    /// Render a GIF on a worker thread and write it to `path` (via a temp file
+    /// and rename) unless a newer job started meanwhile.
+    fn start_gif(&mut self, doc: ManifestDocument, style: skema_core::DiagramStyle, path: PathBuf) {
+        use std::sync::atomic::Ordering;
+        let generation = self.gif_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let newest = self.gif_generation.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.gif_job = Some(rx);
+        std::thread::spawn(move || {
+            let result = skema_core::render_gif_bytes_with(&doc, &style)
+                .map_err(|f| format_text_failure(&f))
+                .and_then(|bytes| {
+                    if newest.load(Ordering::SeqCst) != generation {
+                        return Err(String::new()); // superseded: write nothing
+                    }
+                    let tmp = path.with_extension("gif.tmp");
+                    fs::write(&tmp, bytes).and_then(|()| fs::rename(&tmp, &path)).map_err(|e| e.to_string())?;
+                    Ok(path)
+                });
+            let _ = tx.send(result);
+        });
+    }
+
+    /// Report a finished background GIF render on the status line.
+    pub fn poll_pictures(&mut self) {
+        let Some(rx) = &self.gif_job else { return };
+        match rx.try_recv() {
+            Ok(Ok(path)) => {
+                self.gif_job = None;
+                self.ok(format!("✓ updated {}", file_name(&path)));
+            }
+            Ok(Err(why)) => {
+                self.gif_job = None;
+                if !why.is_empty() {
+                    self.fail(format!("✗ GIF not updated: {why}"));
+                }
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => self.gif_job = None,
+        }
+    }
+
+    /// Block until the background GIF render, if any, finishes (tests).
+    #[cfg(test)]
+    pub fn wait_pictures(&mut self) {
+        if let Some(rx) = self.gif_job.take() {
+            if let Ok(result) = rx.recv() {
+                let (tx, again) = std::sync::mpsc::channel();
+                let _ = tx.send(result);
+                self.gif_job = Some(again);
+            }
+        }
+        self.poll_pictures();
     }
 
     /// Quit saves first. Only a Manifest that cannot be saved (it fails Validation)
@@ -1385,11 +1476,17 @@ impl App {
                 return;
             }
         };
+        // Always keep the file beside the SVG too, so it can be dragged into an
+        // app that will not paste a GIF; saves then keep it current.
+        let path = self.picture_path("gif");
+        let written = fs::write(&path, &gif);
         match clipboard::copy_gif(&gif) {
-            Ok(how) => self.ok(format!("✓ copied the Diagram as GIF via {how} ({} KB)", gif.len() / 1024)),
+            Ok(how) => match written {
+                Ok(()) => self.ok(format!("✓ copied the Diagram as GIF via {how} ({} KB) · also {}", gif.len() / 1024, file_name(&path))),
+                Err(e) => self.ok(format!("✓ copied the Diagram as GIF via {how} ({} KB) · {} not written: {e}", gif.len() / 1024, file_name(&path))),
+            },
             Err(why) => {
-                let path = gif_fallback_path(&self.manifest_path);
-                if let Err(e) = fs::write(&path, &gif) {
+                if let Err(e) = written {
                     self.fail(format!("✗ clipboard: {why} · and cannot write {}: {e}", path.display()));
                     return;
                 }
@@ -1483,12 +1580,14 @@ impl App {
         } else {
             note
         };
+        let style = skema_core::resolve_style(theme);
+        let mut pictures = String::new();
         if let Some(doc) = &self.manifest {
-            if validate_manifest(doc).is_ok() {
-                let _ = render_manifest_with(doc, &self.svg_path, &skema_core::resolve_style(theme));
+            if validate_manifest(doc).is_ok() && render_manifest_with(doc, &self.svg_path, &style).is_ok() {
+                pictures = self.refresh_pictures(&style);
             }
         }
-        self.info(format!("theme: {}{note}", theme.name()));
+        self.info(format!("theme: {}{note}{pictures}", theme.name()));
     }
 
     /// Ask the terminal for its colors (OSC 10, 11, and 4) and cache them for exports.
@@ -1925,11 +2024,49 @@ mod tests {
         let dir = temp_dir("theme");
         std::env::set_var("SKEMA_CONFIG_DIR", &dir);
         let mut app = open_with(&dir, &two_nodes());
+        fs::write(dir.join("flow.png"), "old").unwrap();
         app.set_theme(crate::canvas::Theme::Nord);
         assert_eq!(fs::read_to_string(dir.join("theme")).unwrap().trim(), "nord");
+        // A theme change re-renders the PNG beside the SVG in the new colors.
+        let nord = skema_core::render_png_bytes_with(app.manifest.as_ref().unwrap(), &skema_core::resolve_style(crate::canvas::Theme::Nord)).unwrap();
+        assert_eq!(fs::read(dir.join("flow.png")).unwrap(), nord);
         let again = open_with(&dir, &two_nodes());
         assert_eq!(again.theme, crate::canvas::Theme::Nord);
         std::env::remove_var("SKEMA_CONFIG_DIR");
+    }
+
+    #[test]
+    fn save_refreshes_the_png_and_gif_beside_the_svg_only_when_they_exist() {
+        let dir = temp_dir("pictures");
+        let pulsing = two_nodes().replace(r#""edges":[]"#, r#""edges":[{"from":"a","to":"b","pulse":"forward"}]"#);
+        let mut app = open_with(&dir, &pulsing);
+        app.save();
+        assert!(!dir.join("flow.png").exists() && !dir.join("flow.gif").exists(), "none made unasked");
+
+        fs::write(dir.join("flow.png"), "old").unwrap();
+        fs::write(dir.join("flow.gif"), "old").unwrap();
+        app.select_id("a");
+        app.move_selected(0, 1);
+        app.save();
+        assert!(fs::read(dir.join("flow.png")).unwrap().starts_with(b"\x89PNG"), "PNG rendered inline");
+        assert!(app.status.text.contains("GIF updating"), "{}", app.status.text);
+        app.wait_pictures();
+        assert!(fs::read(dir.join("flow.gif")).unwrap().starts_with(b"GIF89a"));
+        assert!(app.status.text.contains("updated flow.gif"), "{}", app.status.text);
+        assert!(!dir.join("flow.gif.tmp").exists());
+    }
+
+    #[test]
+    fn no_gif_is_rendered_when_nothing_pulses() {
+        let dir = temp_dir("no-pulse-gif");
+        let mut app = open_with(&dir, &two_nodes());
+        fs::write(dir.join("flow.gif"), "old").unwrap();
+        app.select_id("a");
+        app.move_selected(0, 1);
+        app.save();
+        app.wait_pictures();
+        assert_eq!(fs::read(dir.join("flow.gif")).unwrap(), b"old");
+        assert!(app.status.text.contains("no pulses"), "{}", app.status.text);
     }
 
     #[test]
@@ -2125,7 +2262,6 @@ mod tests {
         assert_eq!(app.copy_menu, Some(CopyItem::Gif), "wraps up to GIF once a pulse exists");
         app.toggle_copy_menu();
         assert_eq!(app.copy_menu, None);
-        assert_eq!(gif_fallback_path(Path::new("/tmp/x/flow.json")), PathBuf::from("/tmp/x/flow.gif"));
     }
 
     #[test]

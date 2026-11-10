@@ -54,6 +54,7 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
     let mut last_click: Option<(Instant, String)> = None;
     let mut last_disk = Instant::now();
     while !app.should_quit {
+        app.poll_pictures();
         terminal.draw(|frame| {
             hits = ui::draw(frame, app);
             view = hits.canvas;
