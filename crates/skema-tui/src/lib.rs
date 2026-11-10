@@ -21,7 +21,7 @@ use skema_core::TextFailure;
 use app::{App, Button, Mode};
 use geometry::ZOOMS;
 use ui::{CanvasView, Hits};
-use canvas::edge_at;
+use canvas::{edge_at, separator_at};
 
 /// Open the Editor for one Manifest and SVG and run until the Human reviewer quits.
 /// With `autosave`, every accepted edit writes the Manifest and SVG at once.
@@ -52,16 +52,21 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
     let mut port_drag = false;
     // Last click target for double-click detection: a Node id or an Edge index.
     let mut last_click: Option<(Instant, String)> = None;
+    let mut last_disk = Instant::now();
     while !app.should_quit {
+        app.poll_pictures();
         terminal.draw(|frame| {
             hits = ui::draw(frame, app);
             view = hits.canvas;
         })?;
-        // Redraw quickly while a button flash is showing; otherwise poll the disk.
-        let wait = if app.tick_flash() { Duration::from_millis(30) } else { Duration::from_millis(250) };
+        // Redraw quickly while a button flash shows, about every 80 ms while a
+        // pulse animates on screen, and otherwise wake only to poll the disk.
+        let wait = app.redraw_wait();
         if !event::poll(wait)? {
-            if app.flash.is_none() {
+            // The disk keeps its own 250 ms pace however often frames are drawn.
+            if app.flash.is_none() && last_disk.elapsed() + Duration::from_millis(20) >= app::DISK_POLL {
                 app.check_disk();
+                last_disk = Instant::now();
             }
             continue;
         }
@@ -71,10 +76,27 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
             Event::Key(key) if key.kind == KeyEventKind::Press => handle_key(app, key.code, key.modifiers),
             Event::Mouse(mouse) => match mouse.kind {
                 MouseEventKind::Down(MouseButton::Left) if in_rect(hits.copy_button, mouse.column, mouse.row) => {
-                    app.press(Button::CopyImage);
+                    app.press(Button::Copy);
+                }
+                // An open Copy menu takes the next click: an item copies, anywhere else closes it.
+                MouseEventKind::Down(MouseButton::Left) if app.copy_menu.is_some() => {
+                    match hits.copy_menu_rows.iter().find(|(r, _)| in_rect(*r, mouse.column, mouse.row)) {
+                        Some((_, item)) if app.copy_item_enabled(*item) => app.copy(*item),
+                        Some(_) => {}
+                        None => app.copy_menu = None,
+                    }
+                }
+                MouseEventKind::Down(MouseButton::Left) if in_rect(hits.motion_row, mouse.column, mouse.row) => {
+                    app.toggle_motion();
+                }
+                MouseEventKind::Down(MouseButton::Left) if in_rect(hits.warning_row, mouse.column, mouse.row) => {
+                    app.select_warning();
                 }
                 MouseEventKind::Down(MouseButton::Left) if in_rect(hits.add_button, mouse.column, mouse.row) => {
                     app.press(Button::AddNode);
+                }
+                MouseEventKind::Down(MouseButton::Left) if in_rect(hits.add_separator_button, mouse.column, mouse.row) => {
+                    app.press(Button::AddSeparator);
                 }
                 MouseEventKind::Down(MouseButton::Left)
                     if hits.canvas_buttons.iter().any(|(r, _)| in_rect(*r, mouse.column, mouse.row)) =>
@@ -118,6 +140,14 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                     }
                     let zoom = &ZOOMS[app.zoom];
                     let point = surface_point(&view, mouse.column, mouse.row);
+                    // Adding a Separator: each click picks the nearest Grid point.
+                    if matches!(app.mode, Mode::AddSeparator { .. }) {
+                        if let Some((c, r)) = point {
+                            let (x, y) = zoom.nearest_point(c, r);
+                            app.separator_point(x, y);
+                        }
+                        continue;
+                    }
                     let hit = point.and_then(|(c, r)| app.node_at_point(zoom, c, r));
                     // A press on a connection handle starts a connect from that Node.
                     if !matches!(app.mode, Mode::Connect { .. } | Mode::EditNode { .. } | Mode::EditEdge { .. }) {
@@ -142,6 +172,12 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io
                             if double {
                                 app.begin_label_edit();
                             }
+                            continue;
+                        }
+                        // Then a Separator line, which lies under the Edges.
+                        if let Some(i) = point.and_then(|(c, r)| app.manifest.as_ref().and_then(|d| separator_at(d, zoom, c, r))) {
+                            app.mode = Mode::Normal;
+                            app.select_separator(i);
                             continue;
                         }
                     }
@@ -315,12 +351,30 @@ fn handle_key(app: &mut App, code: KeyCode, mods: KeyModifiers) {
         }
         return;
     }
+    // The Copy menu, while open, takes the arrows, Enter, Esc, and the copy keys.
+    if app.copy_menu.is_some() {
+        match code {
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::BackTab => return app.copy_menu_step(-1),
+            KeyCode::Down | KeyCode::Char('j') | KeyCode::Tab => return app.copy_menu_step(1),
+            KeyCode::Enter => return app.copy_menu_activate(),
+            KeyCode::Esc | KeyCode::Char('C') => {
+                app.copy_menu = None;
+                return;
+            }
+            KeyCode::Char('y') => return app.copy(app::CopyItem::Png),
+            KeyCode::Char('Y') => return app.copy(app::CopyItem::Svg),
+            KeyCode::Char('g') => return app.copy(app::CopyItem::Gif),
+            _ => app.copy_menu = None,
+        }
+    }
     // Edge editor: Enter edits the label, x deletes, Esc leaves. Save and zoom still work.
     if matches!(app.mode, Mode::EditEdge { .. }) {
         match code {
             KeyCode::Enter => app.activate(),
             KeyCode::Esc | KeyCode::Char('q') => app.cancel(),
             KeyCode::Char('x') | KeyCode::Delete => app.delete(),
+            KeyCode::Char('L') => app.cycle_label_position(),
+            KeyCode::Char('p') => app.cycle_pulse(),
             KeyCode::Char('s') => app.save(),
             KeyCode::Char('+') | KeyCode::Char('=') => app.zoom_in(),
             KeyCode::Char('-') | KeyCode::Char('_') => app.zoom_out(),
@@ -336,6 +390,10 @@ fn handle_key(app: &mut App, code: KeyCode, mods: KeyModifiers) {
             KeyCode::Esc | KeyCode::Char('q') => app.cancel(),
             KeyCode::Up | KeyCode::BackTab | KeyCode::Char('k') => app.field_step(-1),
             KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => app.field_step(1),
+            KeyCode::Char('[') => app.resize_selected(-1, 0),
+            KeyCode::Char(']') => app.resize_selected(1, 0),
+            KeyCode::Char('{') => app.resize_selected(0, -1),
+            KeyCode::Char('}') => app.resize_selected(0, 1),
             KeyCode::Char('s') => app.save(),
             KeyCode::Char('+') | KeyCode::Char('=') => app.zoom_in(),
             KeyCode::Char('-') | KeyCode::Char('_') => app.zoom_out(),
@@ -364,6 +422,19 @@ fn handle_key(app: &mut App, code: KeyCode, mods: KeyModifiers) {
         KeyCode::Char('c') => app.begin_connect(),
         KeyCode::Char('e') => app.begin_label_edit(),
         KeyCode::Char('z') => app.cycle_size(),
+        KeyCode::Char('[') => app.resize_selected(-1, 0),
+        KeyCode::Char(']') => app.resize_selected(1, 0),
+        KeyCode::Char('{') => app.resize_selected(0, -1),
+        KeyCode::Char('}') => app.resize_selected(0, 1),
+        KeyCode::Char('L') => app.cycle_label_position(),
+        KeyCode::Char('p') => app.cycle_pulse(),
+        KeyCode::Char('S') => app.begin_add_separator(),
+        KeyCode::Char('t') => app.toggle_separator_style(),
+        KeyCode::Char('m') => app.toggle_motion(),
+        KeyCode::Char('w') => app.next_warning(1),
+        KeyCode::Char('W') => app.next_warning(-1),
+        KeyCode::Char('g') => app.copy_gif(),
+        KeyCode::Char('C') => app.toggle_copy_menu(),
         KeyCode::Char('x') | KeyCode::Delete => app.delete(),
         KeyCode::Char('+') | KeyCode::Char('=') => app.zoom_in(),
         KeyCode::Char('-') | KeyCode::Char('_') => app.zoom_out(),

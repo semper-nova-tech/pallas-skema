@@ -3,33 +3,33 @@
 <rect width="896" height="560" fill="#071007"/>
 <rect width="896" height="560" fill="url(#skema-dots)"/>
 <rect x="0.5" y="0.5" width="895" height="559" fill="none" stroke="#365036" stroke-width="1"/>
-<g><title>Agent → JSON Manifest: edits</title><path d="M148 56 L258 56" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M148 56 L258 56" fill="none" stroke="transparent" stroke-width="12"/><polygon points="258,56 250,52 250,60" fill="#85b286"/></g>
-<g><title>JSON Manifest → skema render</title><path d="M414 56 L524 56" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M414 56 L524 56" fill="none" stroke="transparent" stroke-width="12"/><polygon points="524,56 516,52 516,60" fill="#85b286"/></g>
-<g><title>skema render → SVG / PNG: valid</title><path d="M588 82 L588 198" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M588 82 L588 198" fill="none" stroke="transparent" stroke-width="12"/><polygon points="588,198 584,190 592,190" fill="#85b286"/></g>
-<g><title>SVG / PNG → Person: review</title><path d="M524 224 L414 224" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M524 224 L414 224" fill="none" stroke="transparent" stroke-width="12"/><polygon points="414,224 422,220 422,228" fill="#85b286"/></g>
-<g><title>Person → JSON Manifest: arranges · autosaves</title><path d="M336 194 L336 86" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M336 194 L336 86" fill="none" stroke="transparent" stroke-width="12"/><polygon points="336,86 332,94 340,94" fill="#85b286"/></g>
-<g><title>Person → Agent</title><path d="M336 194 L336 138 L84 138 L84 82" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M336 194 L336 138 L84 138 L84 82" fill="none" stroke="transparent" stroke-width="12"/><polygon points="84,82 80,90 88,90" fill="#85b286"/></g>
-<rect x="182" y="50" width="42" height="13" fill="#071007"/><text x="203" y="56" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">edits</text>
-<rect x="594" y="134" width="42" height="13" fill="#071007"/><text x="615" y="140" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">valid</text>
-<rect x="445" y="218" width="48" height="13" fill="#071007"/><text x="469" y="224" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">review</text>
-<rect x="342" y="134" width="141" height="13" fill="#071007"/><text x="412" y="140" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">arranges · autosaves</text>
+<g><title>Agent → JSON Manifest: edits</title><path d="M148 84 L244 84" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M148 84 L244 84" fill="none" stroke="transparent" stroke-width="12"/></g>
+<g><title>JSON Manifest → skema render</title><path d="M428 84 L524 84" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M428 84 L524 84" fill="none" stroke="transparent" stroke-width="12"/></g>
+<g><title>skema render → SVG / PNG: valid</title><path d="M588 138 L588 191" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M588 138 L588 191" fill="none" stroke="transparent" stroke-width="12"/></g>
+<g><title>SVG / PNG → Person: review</title><path d="M524 224 L428 224" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M524 224 L428 224" fill="none" stroke="transparent" stroke-width="12"/></g>
+<g><title>Person → JSON Manifest: arranges · autosaves</title><path d="M336 198 L336 138" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M336 198 L336 138" fill="none" stroke="transparent" stroke-width="12"/></g>
+<g><title>Person → Agent</title><path d="M244 224 L84 224 L84 138" fill="none" stroke="#85b286" stroke-width="1.5" stroke-linejoin="round"/><path d="M244 224 L84 224 L84 138" fill="none" stroke="transparent" stroke-width="12"/></g>
+<rect x="175" y="78" width="42" height="13" fill="#071007"/><text x="196" y="84" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">edits</text>
+<rect x="594" y="158" width="42" height="13" fill="#071007"/><text x="615" y="164" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">valid</text>
+<rect x="452" y="218" width="48" height="13" fill="#071007"/><text x="476" y="224" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">review</text>
+<rect x="342" y="162" width="141" height="13" fill="#071007"/><text x="412" y="168" text-anchor="middle" dominant-baseline="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" fill="#769676">arranges · autosaves</text>
 <g id="node-agent" aria-label="Agent"><title>Agent
 edits files · runs skema render</title>
-<rect x="20" y="30" width="128" height="52" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
+<rect x="20" y="30" width="128" height="108" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
 <rect x="26" y="23" width="45" height="15" fill="#0d1a0d"/><text x="29" y="30" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">Agent</text>
-<text x="29" y="40" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="29" dy="0">edits files ·</tspan><tspan x="29" dy="13">runs skema</tspan><tspan x="29" dy="13">render</tspan></text>
+<text x="29" y="68" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="29" dy="0">edits files ·</tspan><tspan x="29" dy="13">runs skema</tspan><tspan x="29" dy="13">render</tspan></text>
 </g>
 <g id="node-manifest" aria-label="JSON Manifest"><title>JSON Manifest
 Source of Truth</title>
-<rect x="258" y="26" width="156" height="60" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
-<rect x="264" y="19" width="107" height="15" fill="#0d1a0d"/><text x="267" y="26" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">JSON Manifest</text>
-<text x="267" y="53" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="267" dy="0">Source of Truth</tspan></text>
+<rect x="244" y="30" width="184" height="108" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
+<rect x="250" y="23" width="107" height="15" fill="#0d1a0d"/><text x="253" y="30" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">JSON Manifest</text>
+<text x="253" y="81" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="253" dy="0">Source of Truth</tspan></text>
 </g>
 <g id="node-render" aria-label="skema render"><title>skema render
 validate first · same input, same picture</title>
-<rect x="524" y="30" width="128" height="52" rx="16" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
+<rect x="524" y="30" width="128" height="108" rx="16" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
 <rect x="530" y="23" width="99" height="15" fill="#0d1a0d"/><text x="533" y="30" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">skema render</text>
-<text x="533" y="40" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="533" dy="0">validate first ·</tspan><tspan x="533" dy="13">same input, same</tspan><tspan x="533" dy="13">picture</tspan></text>
+<text x="533" y="68" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="533" dy="0">validate first ·</tspan><tspan x="533" dy="13">same input, same</tspan><tspan x="533" dy="13">picture</tspan></text>
 </g>
 <g id="node-picture" aria-label="SVG / PNG"><title>SVG / PNG
 copy to clip</title>
@@ -39,8 +39,14 @@ copy to clip</title>
 </g>
 <g id="node-person" aria-label="Person"><title>Person
 TUI or Prompt</title>
-<rect x="258" y="194" width="156" height="60" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
-<rect x="264" y="187" width="52" height="15" fill="#0d1a0d"/><text x="267" y="194" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">Person</text>
-<text x="267" y="221" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="267" dy="0">TUI or Prompt</tspan></text>
+<rect x="244" y="198" width="184" height="52" rx="8" fill="#0d1a0d" stroke="#a3e4a4" stroke-width="1"/>
+<rect x="250" y="191" width="52" height="15" fill="#0d1a0d"/><text x="253" y="198" fill="#a3e4a4" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="500" dominant-baseline="middle">Person</text>
+<text x="253" y="221" fill="#769676" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" dominant-baseline="hanging"><tspan x="253" dy="0">TUI or Prompt</tspan></text>
 </g>
+<polygon points="244,84 236,80 236,88" fill="#85b286"/>
+<polygon points="524,84 516,80 516,88" fill="#85b286"/>
+<polygon points="588,191 584,183 592,183" fill="#85b286"/>
+<polygon points="428,224 436,220 436,228" fill="#85b286"/>
+<polygon points="336,138 332,146 340,146" fill="#85b286"/>
+<polygon points="84,138 80,146 88,146" fill="#85b286"/>
 </svg>

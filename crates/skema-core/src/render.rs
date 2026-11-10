@@ -1,8 +1,10 @@
 use std::fs;
 use std::path::Path;
 
-use crate::manifest::{ManifestDocument, Node, NodeType};
-use crate::style::{node_extent, DiagramStyle};
+use crate::layout::{layout, Layout, Port, PxRect, Side, PULSE_LEN};
+use crate::manifest::{ManifestDocument, NodeType, Pulse, SeparatorStyle};
+use crate::raster::PULSE_PERIOD_MS;
+use crate::style::DiagramStyle;
 use crate::svg::SvgOutput;
 use crate::validation::{validate_manifest, TextFailure};
 
@@ -54,18 +56,80 @@ pub fn render_manifest_with(
     Ok(SvgOutput { bytes })
 }
 
-fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
-    let nodes: Vec<&Node> = manifest.nodes.iter().collect();
-    let (width, height) = canvas_size(style, &nodes, manifest.grid_bounds());
+/// SVG with CSS pulse animation (the file and clipboard output).
+pub(crate) fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
+    build_svg_at(manifest, style, None)
+}
+
+/// A static SVG with every pulse dash placed at `t_ms` into the loop, for GIF frames.
+pub(crate) fn build_svg_frame(manifest: &ManifestDocument, style: &DiagramStyle, t_ms: u32) -> String {
+    build_svg_at(manifest, style, Some(t_ms))
+}
+
+/// Pulse dash offset at a time in the loop. The dash pattern is `PULSE_LEN` on,
+/// `len + PULSE_LEN` off, so the dash is hidden before the start at offset
+/// `PULSE_LEN` and past the end at offset `-len`.
+fn pulse_offset(mode: Pulse, len: i64, t_ms: u32) -> f64 {
+    let p = (t_ms % PULSE_PERIOD_MS) as f64 / PULSE_PERIOD_MS as f64;
+    let progress = match mode {
+        Pulse::Both => {
+            if p < 0.5 {
+                2.0 * p
+            } else {
+                2.0 - 2.0 * p
+            }
+        }
+        _ => p,
+    };
+    PULSE_LEN as f64 - progress * (len + PULSE_LEN) as f64
+}
+
+/// CSS for the pulsing Edges: one keyframe per Edge (offsets are in px of that
+/// Edge's path), one period for all, and a reduced-motion rule. Empty when no
+/// Edge pulses.
+fn pulse_css(layout: &Layout) -> String {
+    let mut css = String::new();
+    for (i, e) in layout.edges.iter().enumerate() {
+        let mode = e.edge.pulse_mode();
+        if mode == Pulse::None {
+            continue;
+        }
+        let len = e.length();
+        let (duration, direction) = match mode {
+            Pulse::Both => (PULSE_PERIOD_MS / 2, " alternate"),
+            _ => (PULSE_PERIOD_MS, ""),
+        };
+        css.push_str(&format!(
+            "@keyframes skema-pulse-{i}{{from{{stroke-dashoffset:{PULSE_LEN}}}to{{stroke-dashoffset:-{len}}}}}.skema-pulse-{i}{{animation:skema-pulse-{i} {duration}ms linear infinite{direction};}}"
+        ));
+    }
+    if !css.is_empty() {
+        css.push_str("@media (prefers-reduced-motion: reduce){.skema-pulse{animation:none;visibility:hidden;}}");
+    }
+    css
+}
+
+fn path_d(pts: &[(i64, i64)]) -> String {
+    pts.iter()
+        .enumerate()
+        .map(|(i, (x, y))| format!("{}{x} {y}", if i == 0 { "M" } else { "L" }))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn build_svg_at(manifest: &ManifestDocument, style: &DiagramStyle, frame: Option<u32>) -> String {
+    let layout = layout(manifest, style);
+    let (width, height) = (layout.width, layout.height);
     let color = &style.color;
 
+    let animation = if frame.is_none() { pulse_css(&layout) } else { String::new() };
     let mut out = String::new();
     out.push_str(&format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">"#
     ));
     out.push('\n');
     out.push_str(&format!(
-        r#"<defs><style>{}</style><pattern id="skema-dots" width="{cell}" height="{cell}" patternUnits="userSpaceOnUse" x="{dot}" y="{dot}"><circle cx="{cx}" cy="{cy}" r="{radius}" fill="{fill}"/></pattern></defs>"#,
+        r#"<defs><style>{}{animation}</style><pattern id="skema-dots" width="{cell}" height="{cell}" patternUnits="userSpaceOnUse" x="{dot}" y="{dot}"><circle cx="{cx}" cy="{cy}" r="{radius}" fill="{fill}"/></pattern></defs>"#,
         font_faces(),
         cell = style.cell,
         dot = style.dot_offset,
@@ -87,102 +151,81 @@ fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
     ));
     out.push('\n');
 
-    // Edges: orthogonal routes between side-midpoint ports, arrowhead at the target,
-    // label on the longest segment. Same rules as the terminal Editor.
-    let mut labels = String::new();
-    // A target side already used by another Edge yields to the next-best side, so
-    // arrowheads and labels do not pile onto one port.
-    let mut taken: std::collections::HashSet<(String, Side)> = std::collections::HashSet::new();
-    for edge in &manifest.edges {
-        let (Some(from), Some(to)) = (
-            nodes.iter().find(|n| n.id == edge.from),
-            nodes.iter().find(|n| n.id == edge.to),
-        ) else {
-            continue;
+    // Separators: under everything else, a dim 1.5 px line on the Grid lines.
+    for s in &layout.separators {
+        let (x1, y1, x2, y2) = s.line;
+        let dash = match s.sep.style {
+            SeparatorStyle::Dashed => r#" stroke-dasharray="6 4""#,
+            SeparatorStyle::Solid => "",
         };
-        let fr = node_rect(style, from);
-        let tr = node_rect(style, to);
-        // An explicit side in the Manifest wins; otherwise the facing rule decides.
-        let cell = style.cell;
-        let src = match edge.from_side {
-            Some(side) => port_on(fr, side.into(), cell),
-            None => facing_port(fr, rect_center(tr), cell),
-        };
-        let dst = match edge.to_side {
-            Some(side) => port_on(tr, side.into(), cell),
-            None => ranked_ports(tr, rect_center(fr), cell)
-                .into_iter()
-                .find(|p| !taken.contains(&(to.id.clone(), p.side)))
-                .unwrap_or_else(|| facing_port(tr, rect_center(fr), cell)),
-        };
-        taken.insert((to.id.clone(), dst.side));
-        // A bracket beside a box that overhangs the outer dots could leave the canvas; keep it on.
-        let pts: Vec<(i64, i64)> =
-            route(src, dst, cell / 2).into_iter().map(|(x, y)| (x.clamp(1, width - 1), y.clamp(1, height - 1))).collect();
-        let d: Vec<String> = pts
-            .iter()
-            .enumerate()
-            .map(|(i, (x, y))| format!("{}{x} {y}", if i == 0 { "M" } else { "L" }))
-            .collect();
+        out.push_str(&format!(
+            r#"<line id="separator-{}" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{}" stroke-width="1.5"{dash}/>"#,
+            escape_xml(&s.sep.id),
+            color.frame,
+        ));
+        out.push('\n');
+    }
+
+    // Edges: orthogonal routes between side-midpoint ports. Same rules as the terminal Editor.
+    for e in &layout.edges {
+        let d = path_d(&e.pts);
         // Hover tooltip: the full Edge, on a wide invisible stroke so the thin line is easy to hit.
-        let from_label = from.label.as_str();
-        let to_label = to.label.as_str();
-        let tip = match edge.label.as_deref() {
-            Some(label) => format!("{from_label} → {to_label}: {label}"),
-            None => format!("{from_label} → {to_label}"),
+        let tip = match e.edge.label.as_deref() {
+            Some(label) => format!("{} → {}: {label}", e.from.label, e.to.label),
+            None => format!("{} → {}", e.from.label, e.to.label),
         };
         out.push_str(&format!("<g><title>{}</title>", escape_xml(&tip)));
         out.push_str(&format!(
-            r#"<path d="{}" fill="none" stroke="{}" stroke-width="{}" stroke-linejoin="round"/>"#,
-            d.join(" "),
-            color.line,
-            style.edge_width,
+            r#"<path d="{d}" fill="none" stroke="{}" stroke-width="{}" stroke-linejoin="round"/>"#,
+            color.line, style.edge_width,
         ));
-        out.push_str(&format!(
-            r#"<path d="{}" fill="none" stroke="transparent" stroke-width="12"/>"#,
-            d.join(" "),
-        ));
-        out.push_str(&arrowhead(dst, color.line.as_str(), style.edge_head));
+        out.push_str(&format!(r#"<path d="{d}" fill="none" stroke="transparent" stroke-width="12"/>"#));
         out.push_str("</g>\n");
-        if let Some(label) = &edge.label {
-            let (a, b) = longest_segment(&pts);
-            let (lx, ly) = ((a.0 + b.0) / 2, (a.1 + b.1) / 2);
-            let text_w = (label.chars().count() as i64 * style.edge_label_size * 600 / 1000) + style.text_pad_x;
-            let text_h = style.edge_label_size + 2;
-            let (bx, by) = if a.1 == b.1 {
-                (lx - text_w / 2, ly - text_h / 2)
-            } else {
-                (lx + style.edge_label_lift, ly - text_h / 2)
-            };
-            labels.push_str(&format!(
-                r#"<rect x="{bx}" y="{by}" width="{text_w}" height="{text_h}" fill="{}"/>"#,
-                color.canvas
-            ));
-            labels.push_str(&format!(
-                r#"<text x="{}" y="{}" text-anchor="middle" dominant-baseline="middle" font-family="{}" font-size="{}" fill="{}">{}</text>"#,
-                bx + text_w / 2,
-                by + text_h / 2,
-                style.font_family,
-                style.edge_label_size,
-                color.phosphor_dim,
-                escape_xml(label),
-            ));
-            labels.push('\n');
+    }
+
+    // Pulses: a short bright dash riding each pulsing Edge. Hidden before the
+    // start when nothing animates it (PNG, or reduced motion).
+    for (i, e) in layout.edges.iter().enumerate() {
+        let mode = e.edge.pulse_mode();
+        if mode == Pulse::None {
+            continue;
+        }
+        let len = e.length();
+        let offset = match frame {
+            None => format!("{PULSE_LEN}"),
+            Some(t) => format!("{:.2}", pulse_offset(mode, len, t)),
+        };
+        let class = if frame.is_none() { format!(r#" class="skema-pulse skema-pulse-{i}""#) } else { String::new() };
+        out.push_str(&format!(
+            r#"<path{class} d="{}" fill="none" stroke="{}" stroke-width="3" stroke-dasharray="{PULSE_LEN} {}" stroke-dashoffset="{offset}"/>"#,
+            path_d(&e.pts),
+            color.phosphor,
+            len + PULSE_LEN,
+        ));
+        out.push('\n');
+    }
+
+    // Edge labels on their own segment, then Separator labels on their line.
+    let size = style.edge_label_size;
+    for e in &layout.edges {
+        if let Some(l) = &e.label {
+            push_label(&mut out, style, l.rect, &l.fitted.drawn, size, color.canvas.as_str());
         }
     }
-    out.push_str(&labels);
+    for s in &layout.separators {
+        if let Some(l) = &s.label {
+            push_label(&mut out, style, l.rect, &l.fitted.drawn, size, color.canvas.as_str());
+        }
+    }
 
     // Nodes: outlined box, label on the top edge, description inside in the dim color.
     // The type is not drawn; a decision rounds its corners more.
-    for node in nodes {
-        let (x, y, w, h) = node_rect(style, node);
+    for n in &layout.nodes {
+        let node = n.node;
+        let (x, y, w, h) = n.rect;
         let (stroke, label_fill, meta_fill) = node_colors(style);
         let rx = if node.node_type == NodeType::Decision { style.radius * 2 } else { style.radius };
-        out.push_str(&format!(
-            r#"<g id="node-{}" aria-label="{}">"#,
-            escape_xml(&node.id),
-            escape_xml(&node.label),
-        ));
+        out.push_str(&format!(r#"<g id="node-{}" aria-label="{}">"#, escape_xml(&node.id), escape_xml(&node.label)));
         // Hover tooltip: the full label and description, which the box may cut short.
         let tip = match node.description.as_deref().filter(|d| !d.is_empty()) {
             Some(desc) => format!("{}\n{desc}", node.label),
@@ -192,198 +235,62 @@ fn build_svg(manifest: &ManifestDocument, style: &DiagramStyle) -> String {
         out.push('\n');
         out.push_str(&format!(
             r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{}" stroke="{stroke}" stroke-width="{}"/>"#,
-            color.node_fill,
-            style.node_border,
+            color.node_fill, style.node_border,
         ));
         out.push('\n');
-        let inner = (w - style.text_pad_x * 2).max(1);
-        let label = fit_mono(&node.label, style.label_size, inner);
-        let label_w = label.chars().count() as i64 * style.label_size * 600 / 1000 + 6;
-        let text_x = x + style.text_pad_x;
         // Knock the border out behind the label so it reads as sitting on the edge.
+        let (kx, ky, kw, kh) = n.knock;
+        out.push_str(&format!(r#"<rect x="{kx}" y="{ky}" width="{kw}" height="{kh}" fill="{}"/>"#, color.node_fill));
         out.push_str(&format!(
-            r#"<rect x="{}" y="{}" width="{label_w}" height="{}" fill="{}"/>"#,
-            text_x - 3,
-            y - style.label_size / 2 - 1,
-            style.label_size + 2,
-            color.node_fill,
-        ));
-        out.push_str(&format!(
-            r#"<text x="{text_x}" y="{y}" fill="{label_fill}" font-family="{}" font-size="{}" font-weight="{}" dominant-baseline="middle">{}</text>"#,
+            r#"<text x="{}" y="{y}" fill="{label_fill}" font-family="{}" font-size="{}" font-weight="{}" dominant-baseline="middle">{}</text>"#,
+            n.text_x,
             style.font_family,
             style.label_size,
             style.label_weight,
-            escape_xml(&label),
+            escape_xml(&n.label.drawn),
         ));
         out.push('\n');
-        if let Some(desc) = node.description.as_deref().filter(|d| !d.is_empty()) {
-            let max_lines = ((h - style.label_size) / (style.meta_size + style.text_gap)).max(1) as usize;
-            let mut lines = wrap_mono(desc, style.meta_size, inner);
-            if lines.len() > max_lines {
-                lines.truncate(max_lines);
-                if let Some(last) = lines.last_mut() {
-                    *last = fit_mono(&format!("{last}…"), style.meta_size, inner);
-                }
-            }
-            let block = (lines.len() as i64) * (style.meta_size + style.text_gap) - style.text_gap;
-            let top = y + style.label_size / 2 + ((h - style.label_size / 2) - block) / 2;
+        if let Some(desc) = &n.desc {
             out.push_str(&format!(
-                r#"<text x="{text_x}" y="{top}" fill="{meta_fill}" font-family="{}" font-size="{}" font-weight="{}" dominant-baseline="hanging">"#,
-                style.font_family,
-                style.meta_size,
-                style.meta_weight,
+                r#"<text x="{}" y="{}" fill="{meta_fill}" font-family="{}" font-size="{}" font-weight="{}" dominant-baseline="hanging">"#,
+                n.text_x, desc.top, style.font_family, style.meta_size, style.meta_weight,
             ));
-            for (index, line) in lines.iter().enumerate() {
+            for (index, line) in desc.lines.iter().enumerate() {
                 let dy = if index == 0 { 0 } else { style.meta_size + style.text_gap };
-                out.push_str(&format!(r#"<tspan x="{text_x}" dy="{dy}">{}</tspan>"#, escape_xml(line)));
+                out.push_str(&format!(r#"<tspan x="{}" dy="{dy}">{}</tspan>"#, n.text_x, escape_xml(line)));
             }
             out.push_str("</text>\n");
         }
         out.push_str("</g>\n");
     }
 
+    // Arrowheads last, so no box, label, or background ever covers one (FR-10).
+    for e in &layout.edges {
+        for head in &e.heads {
+            out.push_str(&arrowhead(*head, color.line.as_str(), style.edge_head));
+        }
+        out.push('\n');
+    }
+
     out.push_str("</svg>\n");
     out
 }
 
-fn canvas_size(style: &DiagramStyle, nodes: &[&Node], bounds: (i64, i64)) -> (i64, i64) {
-    // Whole cells only, so the dots keep an even margin on every side.
-    let (mut columns, mut rows) = bounds;
-    for node in nodes {
-        let (c, r) = node_extent(style, node);
-        columns = columns.max(c);
-        rows = rows.max(r);
-    }
-    (columns * style.cell, rows * style.cell)
+/// A small label on a background box that breaks the line beneath it.
+fn push_label(out: &mut String, style: &DiagramStyle, (bx, by, w, h): PxRect, text: &str, size: i64, bg: &str) {
+    out.push_str(&format!(r#"<rect x="{bx}" y="{by}" width="{w}" height="{h}" fill="{bg}"/>"#));
+    out.push_str(&format!(
+        r#"<text x="{}" y="{}" text-anchor="middle" dominant-baseline="middle" font-family="{}" font-size="{size}" fill="{}">{}</text>"#,
+        bx + w / 2,
+        by + h / 2,
+        style.font_family,
+        style.color.phosphor_dim,
+        escape_xml(text),
+    ));
+    out.push('\n');
 }
 
-type PxRect = (i64, i64, i64, i64);
-
-fn node_rect(style: &DiagramStyle, node: &Node) -> PxRect {
-    crate::style::node_rect(style, node)
-}
-
-fn rect_center((x, y, w, h): PxRect) -> (i64, i64) {
-    (x + w / 2, y + h / 2)
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum Side {
-    Left,
-    Right,
-    Top,
-    Bottom,
-}
-
-#[derive(Clone, Copy)]
-struct Port {
-    x: i64,
-    y: i64,
-    side: Side,
-}
-
-impl From<crate::manifest::Side> for Side {
-    fn from(side: crate::manifest::Side) -> Side {
-        match side {
-            crate::manifest::Side::Left => Side::Left,
-            crate::manifest::Side::Right => Side::Right,
-            crate::manifest::Side::Top => Side::Top,
-            crate::manifest::Side::Bottom => Side::Bottom,
-        }
-    }
-}
-
-/// The midpoint port on a given side. Boxes are centered on their cells, so a
-/// box's middle is its Grid row's center line and Nodes of different heights on
-/// one row connect with a straight line.
-fn port_on((x, y, w, h): PxRect, side: Side, _cell: i64) -> Port {
-    let cx = x + w / 2;
-    let cy = y + h / 2;
-    match side {
-        Side::Left => Port { x, y: cy, side },
-        Side::Right => Port { x: x + w, y: cy, side },
-        Side::Top => Port { x: cx, y, side },
-        Side::Bottom => Port { x: cx, y: y + h, side },
-    }
-}
-
-/// The four side-midpoint ports ordered by how squarely each faces a point,
-/// measured in half-box units so a wide box still prefers top or bottom when
-/// the target is above or below.
-fn ranked_ports((x, y, w, h): PxRect, (tx, ty): (i64, i64), cell: i64) -> [Port; 4] {
-    let (cx, cy) = (x + w / 2, y + h / 2);
-    let dx = (tx - cx) as f64 / (w as f64 / 2.0).max(1.0);
-    let dy = (ty - cy) as f64 / (h as f64 / 2.0).max(1.0);
-    let rect = (x, y, w, h);
-    let mut ports = [
-        (dx, port_on(rect, Side::Right, cell)),
-        (-dx, port_on(rect, Side::Left, cell)),
-        (dy, port_on(rect, Side::Bottom, cell)),
-        (-dy, port_on(rect, Side::Top, cell)),
-    ];
-    // Stable sort keeps the Right/Left-before-Bottom/Top tie-break of the facing rule.
-    ports.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    [ports[0].1, ports[1].1, ports[2].1, ports[3].1]
-}
-
-/// The port that faces a point best.
-fn facing_port(rect: PxRect, toward: (i64, i64), cell: i64) -> Port {
-    ranked_ports(rect, toward, cell)[0]
-}
-
-/// Orthogonal polyline from port to port, mirroring the terminal Editor's routing.
-/// Two ports on the same side bracket out by `reach` past the outer one.
-fn route(from: Port, to: Port, reach: i64) -> Vec<(i64, i64)> {
-    let horizontal = |s: Side| matches!(s, Side::Left | Side::Right);
-    let mut pts = vec![(from.x, from.y)];
-    if from.side == to.side {
-        match from.side {
-            Side::Left | Side::Right => {
-                let x = if from.side == Side::Left { from.x.min(to.x) - reach } else { from.x.max(to.x) + reach };
-                pts.push((x, from.y));
-                pts.push((x, to.y));
-            }
-            Side::Top | Side::Bottom => {
-                let y = if from.side == Side::Top { from.y.min(to.y) - reach } else { from.y.max(to.y) + reach };
-                pts.push((from.x, y));
-                pts.push((to.x, y));
-            }
-        }
-        pts.push((to.x, to.y));
-        pts.dedup();
-        return pts;
-    }
-    match (horizontal(from.side), horizontal(to.side)) {
-        (true, true) => {
-            if from.y != to.y {
-                let mid = (from.x + to.x) / 2;
-                pts.push((mid, from.y));
-                pts.push((mid, to.y));
-            }
-        }
-        (false, false) => {
-            if from.x != to.x {
-                let mid = (from.y + to.y) / 2;
-                pts.push((from.x, mid));
-                pts.push((to.x, mid));
-            }
-        }
-        (true, false) => pts.push((to.x, from.y)),
-        (false, true) => pts.push((from.x, to.y)),
-    }
-    pts.push((to.x, to.y));
-    pts.dedup();
-    pts
-}
-
-fn longest_segment(pts: &[(i64, i64)]) -> ((i64, i64), (i64, i64)) {
-    pts.windows(2)
-        .map(|p| (p[0], p[1]))
-        .max_by_key(|(a, b)| (b.0 - a.0).abs() + (b.1 - a.1).abs())
-        .unwrap_or((pts[0], pts[0]))
-}
-
-/// Filled triangle pointing into the Node at the target port.
+/// Filled triangle pointing into the Node at a port.
 fn arrowhead(port: Port, fill: &str, size: i64) -> String {
     let (x, y, s) = (port.x, port.y, size);
     let half = s / 2;
@@ -399,23 +306,6 @@ fn arrowhead(port: Port, fill: &str, size: i64) -> String {
 fn node_colors(style: &DiagramStyle) -> (&str, &str, &str) {
     let color = &style.color;
     (&color.phosphor, &color.phosphor, &color.phosphor_dim)
-}
-
-/// Characters of monospace text that fit in `inner_width` at `font_size`.
-/// IBM Plex Mono advances 600/1000 em per glyph.
-fn max_chars(font_size: i64, inner_width: i64) -> usize {
-    ((inner_width * 1000) / (font_size * 600).max(1)).max(1) as usize
-}
-
-/// Truncate with an ellipsis to the box width.
-fn fit_mono(text: &str, font_size: i64, inner_width: i64) -> String {
-    let max = max_chars(font_size, inner_width);
-    if text.chars().count() <= max {
-        return text.to_owned();
-    }
-    let mut out: String = text.chars().take(max.saturating_sub(1)).collect();
-    out.push('…');
-    out
 }
 
 fn font_faces() -> &'static str {
@@ -458,53 +348,6 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
-/// Wrap monospace text to the node interior.
-fn wrap_mono(text: &str, font_size: i64, inner_width: i64) -> Vec<String> {
-    let max_chars = max_chars(font_size, inner_width);
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    for word in text.split_whitespace() {
-        let word_len = word.chars().count();
-        let current_len = current.chars().count();
-        if current.is_empty() {
-            push_word(&mut lines, &mut current, word, word_len, max_chars);
-        } else if current_len + 1 + word_len <= max_chars {
-            current.push(' ');
-            current.push_str(word);
-        } else {
-            lines.push(std::mem::take(&mut current));
-            push_word(&mut lines, &mut current, word, word_len, max_chars);
-        }
-    }
-    if !current.is_empty() {
-        lines.push(current);
-    }
-    if lines.is_empty() {
-        lines.push(String::new());
-    }
-    lines
-}
-
-fn push_word(
-    lines: &mut Vec<String>,
-    current: &mut String,
-    word: &str,
-    word_len: usize,
-    max_chars: usize,
-) {
-    if word_len <= max_chars {
-        *current = word.to_string();
-        return;
-    }
-    let mut rest = word;
-    while rest.chars().count() > max_chars {
-        let (head, tail) = rest.split_at(rest.chars().take(max_chars).map(char::len_utf8).sum());
-        lines.push(head.to_string());
-        rest = tail;
-    }
-    *current = rest.to_string();
-}
-
 fn escape_xml(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -516,6 +359,7 @@ fn escape_xml(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::grid::GridPosition;
+    use crate::style::node_rect;
     use crate::manifest::{Edge, ManifestDocument, Node, NodeSize, NodeType};
 
     fn sample() -> ManifestDocument {
@@ -540,6 +384,7 @@ mod tests {
                 },
             ],
             edges: vec![Edge { label: Some("next".into()), ..Edge::new("start", "decide") }],
+            separators: vec![],
         }
     }
 
@@ -549,9 +394,10 @@ mod tests {
         doc.edges[0].from_side = Some(crate::manifest::Side::Bottom);
         doc.edges[0].to_side = Some(crate::manifest::Side::Top);
         let svg = build_svg(&doc, crate::style::diagram_style());
-        // start bottom (84,82) → decide top (196,34): vertical-vertical with a jog.
-        assert!(svg.contains(r#"<path d="M84 82 L84 58 L196 58 L196 34""#), "{svg}");
-        assert!(svg.contains("<polygon points=\"196,34 "), "arrowhead at the top port");
+        // start bottom (84,82) → decide top (196,30): vertical-vertical with a jog.
+        // The jog runs below the top border, so the Edge is not stopped above the label.
+        assert!(svg.contains(r#"<path d="M84 82 L84 56 L196 56 L196 30""#), "{svg}");
+        assert!(svg.contains("<polygon points=\"196,30 "), "arrowhead at the top port");
     }
 
     #[test]
@@ -599,13 +445,13 @@ mod tests {
         doc.edges[0].from_side = Some(crate::manifest::Side::Left);
         doc.edges[0].to_side = Some(crate::manifest::Side::Left);
         let svg = build_svg(&doc, crate::style::diagram_style());
-        // start (medium) overhangs its dots to x = 20 and decide (small) sits at 32; the
-        // bracket runs half a cell past the outer port, kept on the canvas at x = 1.
-        assert!(svg.contains(r#"<path d="M20 56 L1 56 L1 224 L32 224""#), "{svg}");
+        // Both boxes are 2×1 (small draws like medium) and overhang their dots to x = 20;
+        // the bracket runs half a cell past the outer port, kept on the canvas at x = 1.
+        assert!(svg.contains(r#"<path d="M20 56 L1 56 L1 224 L20 224""#), "{svg}");
         doc.nodes[0].grid_position = GridPosition { x: 2, y: 0 };
         doc.nodes[1].grid_position = GridPosition { x: 2, y: 3 };
         let svg = build_svg(&doc, crate::style::diagram_style());
-        assert!(svg.contains(r#"<path d="M132 56 L104 56 L104 224 L144 224""#), "{svg}");
+        assert!(svg.contains(r#"<path d="M132 56 L104 56 L104 224 L132 224""#), "{svg}");
     }
 
     #[test]
@@ -619,10 +465,10 @@ mod tests {
         assert!(svg.contains(&style.font_family));
         assert!(svg.contains("kicks things off"), "description sits inside the box");
         assert!(!svg.contains("process · medium") && !svg.contains("decision · small"), "the type is not drawn");
-        // start (medium) → decide (small) share a Grid row, so despite different box
-        // heights the Edge is one straight line on the row's center (y = 28 + 56/2).
-        assert!(svg.contains(r#"<path d="M148 56 L144 56""#), "{svg}");
-        assert!(svg.contains("<polygon points=\"144,56 "), "arrowhead at the target port");
+        // start → decide share a Grid row, so the Edge is one straight line on the
+        // row's center (y = 28 + 56/2). The boxes overhang their dots, so it runs right to left.
+        assert!(svg.contains(r#"<path d="M148 56 L132 56""#), "{svg}");
+        assert!(svg.contains("<polygon points=\"132,56 "), "arrowhead at the target port");
         assert!(svg.contains(r#"width="896" height="560""#));
     }
 }

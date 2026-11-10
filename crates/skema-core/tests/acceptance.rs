@@ -133,6 +133,7 @@ fn ac_preserve_svg() {
         canvas: None,
         nodes: good.nodes.clone(),
         edges: vec![skema_core::Edge::new("start", "ghost")],
+        separators: vec![],
     };
     let err = render_manifest(&invalid, &path);
     assert!(err.is_err());

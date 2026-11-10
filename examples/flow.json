@@ -33,7 +33,7 @@
     {
       "id": "revise",
       "label": "reject",
-      "description": "Send back to drawing board.",
+      "description": "Back to drafting.",
       "type": "note",
       "size": "large",
       "gridPosition": {

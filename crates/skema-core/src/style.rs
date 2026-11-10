@@ -28,21 +28,11 @@ pub struct DiagramStyle {
     pub edge_label_lift: i64,
     pub text_gap: i64,
     pub text_pad_x: i64,
-    pub nodes: StyleNodes,
+    /// A Node box is this many px wider than its span on each side.
+    pub box_overhang_x: i64,
+    /// A Node box is this many px shorter than its span on each side.
+    pub box_inset_y: i64,
     pub color: StyleColor,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct StyleNodes {
-    pub small: StyleBox,
-    pub medium: StyleBox,
-    pub large: StyleBox,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct StyleBox {
-    pub width: i64,
-    pub height: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,17 +65,13 @@ pub fn styled(color: StyleColor) -> DiagramStyle {
     DiagramStyle { color, ..diagram_style().clone() }
 }
 
-/// Grid cells a Node covers, (columns, rows): its box size rounded to whole cells.
-/// The box is centered on that span, so it sits the same distance from the dots
-/// on opposite sides; a box a little wider than its span overhangs both evenly.
-pub fn node_span(style: &DiagramStyle, size: NodeSize) -> (i64, i64) {
-    let (w, h) = node_box(style, size);
-    let round = |px: i64| ((px + style.cell / 2) / style.cell).max(1);
-    (round(w), round(h))
+/// Grid cells a Node covers, (columns, rows): its Footprint.
+pub fn node_span(_style: &DiagramStyle, size: NodeSize) -> (i64, i64) {
+    size.footprint()
 }
 
 /// A Node's box in SVG pixels, (x, y, width, height). Dots sit at `pad + k * cell`;
-/// the box is centered between the dots of the cells it covers.
+/// the box is centered on the cells it covers.
 pub fn node_rect(style: &DiagramStyle, node: &crate::manifest::Node) -> (i64, i64, i64, i64) {
     let (w, h) = node_box(style, node.size);
     let (sw, sh) = node_span(style, node.size);
@@ -100,11 +86,9 @@ pub fn node_extent(style: &DiagramStyle, node: &crate::manifest::Node) -> (i64, 
     (node.grid_position.x + sw + 1, node.grid_position.y + sh + 1)
 }
 
+/// Box size in px: span width plus an overhang each side, span height less an inset each side.
+/// 2×1 is 128×52.
 pub fn node_box(style: &DiagramStyle, size: NodeSize) -> (i64, i64) {
-    let node = match size {
-        NodeSize::Small => &style.nodes.small,
-        NodeSize::Medium => &style.nodes.medium,
-        NodeSize::Large => &style.nodes.large,
-    };
-    (node.width, node.height)
+    let (c, r) = size.footprint();
+    (c * style.cell + 2 * style.box_overhang_x, r * style.cell - 2 * style.box_inset_y)
 }

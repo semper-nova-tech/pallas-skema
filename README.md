@@ -128,8 +128,12 @@ manifests, and the "needs `skema` X or newer" line in
 push a matching tag:
 
 ```bash
-git tag v0.2.2 && git push origin v0.2.2
+git tag v0.3.0 && git push origin v0.3.0
 ```
+
+Tag right after the version bump merges to `master`. The skill and plugin
+manifests are served from `master` and go live on merge, but the binary they
+ask for exists only once the tag's release build finishes.
 
 CI builds macOS and Linux (arm64 and x86_64) and Windows (x86_64), publishes a
 GitHub Release with `skema-installer.sh` and `skema-installer.ps1`. The

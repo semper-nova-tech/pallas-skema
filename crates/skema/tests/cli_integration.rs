@@ -278,3 +278,118 @@ fn render_defaults_to_the_terminal_palette_and_falls_back_to_phosphor() {
     assert!(!svg_text.contains(&format!("fill=\"{phosphor}\"")));
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// A Manifest with no Label warnings.
+fn clean_manifest(dir: &Path) -> PathBuf {
+    let manifest = dir.join("clean.json");
+    fs::write(
+        &manifest,
+        r#"{"nodes":[
+        {"id":"a","label":"Client","type":"process","size":"medium","gridPosition":{"x":1,"y":1}},
+        {"id":"b","label":"Server","type":"process","size":"medium","gridPosition":{"x":6,"y":1}}
+        ],"edges":[{"from":"a","to":"b","label":"call","pulse":"both"}]}"#,
+    )
+    .unwrap();
+    manifest
+}
+
+fn aws_front_end_client(dir: &Path) -> PathBuf {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let json = fs::read_to_string(root.join("examples/aws-microservices.json"))
+        .unwrap()
+        .replace("\"Web client\"", "\"Front-end client\"");
+    let manifest = dir.join("aws.json");
+    fs::write(&manifest, json).unwrap();
+    manifest
+}
+
+fn render_cmd(manifest: &Path, svg: &Path, extra: &[&str]) -> std::process::Output {
+    Command::new(skema_bin())
+        .args(["render", "--theme", "phosphor", "--manifest", manifest.to_str().unwrap(), "--svg", svg.to_str().unwrap()])
+        .args(extra)
+        .output()
+        .expect("spawn skema")
+}
+
+/// AC-warn-truncate: warnings never block output; --strict fails and leaves existing files alone.
+#[test]
+fn ac_warn_truncate_cli_and_strict() {
+    let dir = workspace_temp("warn-truncate");
+    fs::create_dir_all(&dir).unwrap();
+    let manifest = aws_front_end_client(&dir);
+    let svg = dir.join("aws.svg");
+    let out = render_cmd(&manifest, &svg, &[]);
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let truncated: Vec<&str> = stderr.lines().filter(|l| l.starts_with("warning[label-truncated] node \"client\"")).collect();
+    assert_eq!(
+        truncated,
+        [r#"warning[label-truncated] node "client": "Front-end client" → "Front-end cli…" (fits 13 chars at 2×1)"#]
+    );
+    let before = fs::read(&svg).unwrap();
+
+    // Make the next render differ, so an unwanted write would show.
+    let json = fs::read_to_string(&manifest).unwrap().replace("\"Shared DB\"", "\"Shared store\"");
+    fs::write(&manifest, json).unwrap();
+    let png = dir.join("aws.png");
+    let gif = dir.join("aws.gif");
+    let out = render_cmd(&manifest, &svg, &["--strict", "--png", png.to_str().unwrap(), "--gif", gif.to_str().unwrap()]);
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("warning[label-truncated] node \"client\""), "{stderr}");
+    assert!(stderr.contains("--strict"), "{stderr}");
+    assert_eq!(fs::read(&svg).unwrap(), before, "existing SVG keeps its bytes");
+    assert!(!png.exists() && !gif.exists(), "no outputs written");
+
+    // validate prints the same warnings.
+    let out = Command::new(skema_bin()).args(["validate", "--manifest", manifest.to_str().unwrap()]).output().unwrap();
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("node \"client\""));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// AC-warn-json: one parseable JSON array, one object per warning.
+#[test]
+fn ac_warn_json() {
+    let dir = workspace_temp("warn-json");
+    fs::create_dir_all(&dir).unwrap();
+    let manifest = aws_front_end_client(&dir);
+    let svg = dir.join("aws.svg");
+    let text = render_cmd(&manifest, &svg, &[]);
+    let lines = String::from_utf8_lossy(&text.stderr).lines().filter(|l| l.starts_with("warning[")).count();
+    let out = render_cmd(&manifest, &svg, &["--warnings=json"]);
+    assert!(out.status.success());
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stderr).expect("stderr is one JSON array");
+    let items = parsed.as_array().unwrap();
+    assert_eq!(items.len(), lines);
+    let client = items.iter().find(|w| w["id"] == "client").unwrap();
+    assert_eq!(client["code"], "label-truncated");
+    assert_eq!(client["kind"], "node");
+    assert_eq!(client["text"], "Front-end client");
+    assert_eq!(client["drawn"], "Front-end cli…");
+    assert_eq!(client["fits"], 13);
+
+    // Nothing to report: an empty array.
+    let out = Command::new(skema_bin())
+        .args(["validate", "--warnings", "json", "--manifest", clean_manifest(&dir).to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stderr).trim(), "[]");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn render_gif_writes_a_looping_gif() {
+    let dir = workspace_temp("render-gif");
+    fs::create_dir_all(&dir).unwrap();
+    let manifest = clean_manifest(&dir);
+    let svg = dir.join("m.svg");
+    let gif = dir.join("m.gif");
+    let out = render_cmd(&manifest, &svg, &["--gif", gif.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(out.stderr.is_empty(), "no warnings: {}", String::from_utf8_lossy(&out.stderr));
+    let bytes = fs::read(&gif).unwrap();
+    assert_eq!(&bytes[..6], b"GIF89a");
+    let _ = fs::remove_dir_all(&dir);
+}

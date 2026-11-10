@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 use ratatui::Frame;
 
-use crate::app::{file_name, App, Button, Focus, Mode, NodeField, StatusKind};
+use crate::app::{file_name, label_position_name, pulse_name, App, Button, CopyItem, Focus, Mode, NodeField, StatusKind};
 use crate::canvas::{self, fit, node_overflows, palette_for, wrap, Palette, Surface, Theme};
 use ratatui::widgets::Clear;
 use crate::geometry::{fit_zoom, ZOOMS};
@@ -30,6 +30,7 @@ pub struct CanvasView {
 pub struct Hits {
     pub canvas: CanvasView,
     pub add_button: Rect,
+    pub add_separator_button: Rect,
     pub copy_button: Rect,
     pub settings_button: Rect,
     /// Theme rows in the expanded settings: (row rectangle, theme).
@@ -38,6 +39,12 @@ pub struct Hits {
     pub canvas_buttons: Vec<(Rect, (i64, i64))>,
     /// Panel rows that select an Edge when clicked: (row rectangle, edge index).
     pub edge_rows: Vec<(Rect, usize)>,
+    /// Open Copy menu rows: (row rectangle, item).
+    pub copy_menu_rows: Vec<(Rect, CopyItem)>,
+    /// The motion toggle row in the expanded settings.
+    pub motion_row: Rect,
+    /// The Label warning line in the status area.
+    pub warning_row: Rect,
 }
 
 pub fn draw(frame: &mut Frame, app: &mut App) -> Hits {
@@ -45,8 +52,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Hits {
     let area = frame.area();
     frame.render_widget(Block::default().style(Style::default().bg(pal.panel)), area);
 
+    let footer_h = if app.warnings.is_empty() { 2 } else { 3 };
     let [header, body, footer] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(3), Constraint::Length(2)]).areas(area);
+        Layout::vertical([Constraint::Length(1), Constraint::Min(3), Constraint::Length(footer_h)]).areas(area);
     // Tool panel on the left, canvas on the right. The panel grows while editing.
     let editing = matches!(app.mode, Mode::EditNode { .. } | Mode::EditEdge { .. });
     let panel_w = if editing { PANEL_EDIT_W.min(body.width / 2) } else { PANEL_W };
@@ -56,15 +64,19 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> Hits {
     draw_header(frame, header, app, &pal);
     let canvas = draw_canvas(frame, canvas_area, app, &pal);
     let panel = draw_panel(frame, panel_area, app, &pal);
-    draw_footer(frame, footer, app, &pal);
+    let warning_row = draw_footer(frame, footer, app, &pal);
     Hits {
         canvas,
         add_button: panel.add_button,
+        add_separator_button: panel.add_separator_button,
         copy_button: panel.copy_button,
         settings_button: panel.settings_button,
         theme_rows: panel.theme_rows,
         canvas_buttons: panel.canvas_buttons,
         edge_rows: panel.edge_rows,
+        copy_menu_rows: panel.copy_menu_rows,
+        motion_row: panel.motion_row,
+        warning_row,
     }
 }
 
@@ -106,6 +118,7 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
             Line::from(Span::styled("  Fix the file as text, then press r.", Style::default().fg(pal.phosphor_dim))),
         ]);
         frame.render_widget(msg, inner);
+        app.pulse_visible = false;
         return CanvasView { area: inner, scroll: (0, 0) };
     };
 
@@ -132,6 +145,12 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
         _ => None,
     };
     let selected_edge = (app.focus == Focus::Edges).then_some(app.selected_edge);
+    let selected_separator = (app.focus == Focus::Separators).then_some(app.selected_separator);
+    let separator_anchor = match app.mode {
+        Mode::AddSeparator { start } => start,
+        _ => None,
+    };
+    let phase = app.pulse_phase(std::time::Instant::now());
     let surface = canvas::draw_view(
         doc,
         zoom,
@@ -149,6 +168,9 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
                 Mode::Connect { from_side, .. } => *from_side,
                 _ => None,
             },
+            selected_separator,
+            separator_anchor,
+            phase,
             theme: app.drawn_theme(),
         },
     );
@@ -180,6 +202,8 @@ fn draw_canvas(frame: &mut Frame, area: Rect, app: &mut App, pal: &Palette) -> C
         app.scroll = (sx.max(0), sy.max(0));
     }
 
+    let viewport = crate::geometry::Rect { col: app.scroll.0, row: app.scroll.1, w: vw, h: vh };
+    app.pulse_visible = canvas::pulse_visible(doc, zoom, viewport);
     SurfaceView { surface: &surface, scroll: app.scroll }.render(inner, frame.buffer_mut());
 
     // Tooltip: only for a hovered Node whose text was cut short, and never mid-drag.
@@ -258,10 +282,13 @@ impl Widget for SurfaceView<'_> {
 struct PanelHits {
     copy_button: Rect,
     add_button: Rect,
+    add_separator_button: Rect,
     settings_button: Rect,
     theme_rows: Vec<(Rect, Theme)>,
     canvas_buttons: Vec<(Rect, (i64, i64))>,
     edge_rows: Vec<(Rect, usize)>,
+    copy_menu_rows: Vec<(Rect, CopyItem)>,
+    motion_row: Rect,
 }
 
 /// Draws the tool panel and returns its clickable regions.
@@ -279,13 +306,16 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
     let style_for = |b: Button| if app.flashing(b) { flashed } else { filled };
     let mut top = vec![
         Line::from(""),
-        Line::from(vec![Span::raw(" "), Span::styled(button("⎘ Copy image"), style_for(Button::CopyImage))]),
+        Line::from(vec![Span::raw(" "), Span::styled(button("⎘ Copy ▾"), style_for(Button::Copy))]),
         Line::from(""),
         Line::from(vec![Span::raw(" "), Span::styled(button("+ Add node"), style_for(Button::AddNode))]),
+        Line::from(""),
+        Line::from(vec![Span::raw(" "), Span::styled(button("╌ Add separator"), style_for(Button::AddSeparator))]),
         Line::from(""),
     ];
     let copy_button = Rect { x: area.x + 1, y: area.y + 1, width: area.width.saturating_sub(2), height: 1 };
     let add_button = Rect { x: area.x + 1, y: area.y + 3, width: area.width.saturating_sub(2), height: 1 };
+    let add_separator_button = Rect { x: area.x + 1, y: area.y + 5, width: area.width.saturating_sub(2), height: 1 };
 
     // Canvas size presets, two per line: landscape ▭ then portrait ▯. The chosen
     // one is filled; one the Nodes do not fit is dim and refused on click.
@@ -333,6 +363,13 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
             top.push(Line::from(Span::styled(format!("   {mark} {}", theme.name()), style)));
         }
     }
+    let mut motion_row = Rect::default();
+    if app.settings_open {
+        top.push(Line::from(Span::styled("   Motion", Style::default().fg(pal.phosphor_dim))));
+        motion_row = Rect { x: area.x + 1, y: row_y(&top), width: area.width.saturating_sub(2), height: 1 };
+        let text = if app.motion_paused { "   ‖ paused · m plays" } else { "   ▶ pulses on · m pauses" };
+        top.push(Line::from(Span::styled(text, if app.motion_paused { dim } else { bright })));
+    }
     top.push(Line::from(""));
     let top_len = top.len() as u16;
     frame.render_widget(Paragraph::new(top).style(Style::default().bg(pal.panel)), area);
@@ -354,7 +391,10 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
                 let value = match f {
                     NodeField::Label => node.label.clone(),
                     NodeField::Description => node.description.clone().unwrap_or_default(),
-                    NodeField::Size => format!("{:?} ⟳", node.size).to_lowercase(),
+                    NodeField::Size => {
+                        let (c, r) = node.size.footprint();
+                        format!("{c}×{r} ⟳  [ ] {{ }}")
+                    }
                 };
                 let style = if picked { bright } else { dim };
                 let (text, text_style) = match (picked, editing) {
@@ -387,6 +427,7 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
                     let name = if i == 0 { "▶label ".to_string() } else { "       ".into() };
                     body.push(Line::from(vec![Span::styled(name, bright), Span::styled(part, text_style)]));
                 }
+                body.extend(edge_option_lines(edge, dim));
                 let block_area = Rect { x: area.x, y, width: area.width, height: (body.len() as u16 + 2).min(room) };
                 let block = Block::default().borders(Borders::ALL).border_style(bright);
                 let inner = block.inner(block_area);
@@ -399,9 +440,95 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
             let lines = vec![Line::from(Span::styled(fit(&format!(" linking from {from}"), width), bright))];
             frame.render_widget(Paragraph::new(lines), Rect { x: area.x, y, width: area.width, height: 1.min(room) });
         }
+        (Mode::AddSeparator { start }, _) => {
+            let text = match start {
+                None => " separator: click one end".to_string(),
+                Some((x, y)) => format!(" separator from ({x}, {y}): click the other end"),
+            };
+            let lines = vec![Line::from(Span::styled(fit(&text, width), bright))];
+            frame.render_widget(Paragraph::new(lines), Rect { x: area.x, y, width: area.width, height: 1.min(room) });
+        }
+        // A focused Edge or Separator shows its options in a dim box.
+        (Mode::Normal, _) if app.focus == Focus::Edges => {
+            if let Some(edge) = app.selected_edge_ref() {
+                let inner_w = area.width.saturating_sub(2) as usize;
+                let mut body = vec![Line::from(Span::styled(fit(&format!(" {} → {}", edge.from, edge.to), inner_w), bright))];
+                let label = edge.label.clone().unwrap_or_else(|| "(none)".into());
+                body.push(Line::from(vec![Span::styled(" label ", dim), Span::styled(fit(&label, inner_w.saturating_sub(7)), dim)]));
+                body.extend(edge_option_lines(edge, dim));
+                let block_area = Rect { x: area.x, y, width: area.width, height: (body.len() as u16 + 2).min(room) };
+                let block = Block::default().borders(Borders::ALL).border_style(dim);
+                let inner = block.inner(block_area);
+                frame.render_widget(block, block_area);
+                frame.render_widget(Paragraph::new(body), inner);
+                edge_rows.push((block_area, app.selected_edge));
+            }
+        }
+        (Mode::Normal, _) if app.focus == Focus::Separators => {
+            if let Some(sep) = app.selected_separator_ref() {
+                let inner_w = area.width.saturating_sub(2) as usize;
+                let style = match sep.style {
+                    skema_core::SeparatorStyle::Solid => "solid",
+                    skema_core::SeparatorStyle::Dashed => "dashed",
+                };
+                let body = vec![
+                    Line::from(Span::styled(fit(&format!(" separator {}", sep.id), inner_w), bright)),
+                    Line::from(Span::styled(
+                        fit(&format!(" ({}, {}) → ({}, {})", sep.from.x, sep.from.y, sep.to.x, sep.to.y), inner_w),
+                        dim,
+                    )),
+                    Line::from(Span::styled(fit(&format!(" style {style} ⟳ t"), inner_w), dim)),
+                    Line::from(Span::styled(fit(&format!(" label {}", sep.label.as_deref().unwrap_or("(none)")), inner_w), dim)),
+                ];
+                let block_area = Rect { x: area.x, y, width: area.width, height: (body.len() as u16 + 2).min(room) };
+                let block = Block::default().borders(Borders::ALL).border_style(dim);
+                let inner = block.inner(block_area);
+                frame.render_widget(block, block_area);
+                frame.render_widget(Paragraph::new(body), inner);
+            }
+        }
         _ => {}
     }
-    PanelHits { copy_button, add_button, settings_button, theme_rows, canvas_buttons, edge_rows }
+
+    // The Copy menu opens over the panel just below its button.
+    let mut copy_menu_rows: Vec<(Rect, CopyItem)> = Vec::new();
+    if let Some(highlight) = app.copy_menu {
+        let menu = Rect {
+            x: copy_button.x,
+            y: copy_button.y + 1,
+            width: copy_button.width,
+            height: (CopyItem::ALL.len() as u16 + 2).min(area.height.saturating_sub(2)),
+        };
+        frame.render_widget(Clear, menu);
+        let block = Block::default().borders(Borders::ALL).border_style(bright).style(Style::default().bg(pal.panel));
+        let inner = block.inner(menu);
+        frame.render_widget(block, menu);
+        let mut lines = Vec::new();
+        for (i, item) in CopyItem::ALL.into_iter().enumerate() {
+            let enabled = app.copy_item_enabled(item);
+            let text = if enabled { format!("{} {}", item.key(), item.name()) } else { format!("{} GIF · no pulses", item.key()) };
+            let style = if !enabled {
+                dim
+            } else if item == highlight {
+                filled
+            } else {
+                bright
+            };
+            let marker = if item == highlight && enabled { "▶" } else { " " };
+            lines.push(Line::from(Span::styled(fit(&format!("{marker}{text:<w$}", w = inner.width.saturating_sub(1) as usize), inner.width as usize), style)));
+            copy_menu_rows.push((Rect { x: inner.x, y: inner.y + i as u16, width: inner.width, height: 1 }, item));
+        }
+        frame.render_widget(Paragraph::new(lines), inner);
+    }
+    PanelHits { copy_button, add_button, add_separator_button, settings_button, theme_rows, canvas_buttons, edge_rows, copy_menu_rows, motion_row }
+}
+
+/// The label position and pulse rows of an Edge box, with the keys that cycle them.
+fn edge_option_lines(edge: &skema_core::Edge, style: Style) -> Vec<Line<'static>> {
+    vec![
+        Line::from(Span::styled(format!(" pos   {} ⟳ L", label_position_name(edge.label_placement())), style)),
+        Line::from(Span::styled(format!(" pulse {} ⟳ p", pulse_name(edge.pulse_mode())), style)),
+    ]
 }
 
 /// Wrap a field value onto up to `max_lines` lines of `width`, keeping the tail
@@ -421,8 +548,17 @@ fn wrap_field(text: &str, width: usize, max_lines: usize) -> Vec<String> {
     lines
 }
 
-fn draw_footer(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) {
-    let [status, keys] = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(area);
+/// Status, then the current Label warning when there is one, then key hints.
+/// Returns the warning line's rectangle for the mouse.
+fn draw_footer(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> Rect {
+    let (status, warning, keys) = if app.warnings.is_empty() {
+        let [status, keys] = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(area);
+        (status, Rect::default(), keys)
+    } else {
+        let [status, warning, keys] =
+            Layout::vertical([Constraint::Length(1), Constraint::Length(1), Constraint::Length(1)]).areas(area);
+        (status, warning, keys)
+    };
     let style = match app.status.kind {
         StatusKind::Info => Style::default().fg(pal.phosphor_dim),
         StatusKind::Ok => Style::default().fg(pal.phosphor),
@@ -432,10 +568,27 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) {
         Paragraph::new(Line::from(Span::styled(format!(" {}", app.status.text), style))),
         status,
     );
+    if let Some(text) = warning_line(app) {
+        let shown = fit(&text, warning.width.saturating_sub(1) as usize);
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(format!(" {shown}"), Style::default().fg(pal.phosphor)))),
+            warning,
+        );
+    }
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(format!(" {}", app.key_hint()), Style::default().fg(pal.phosphor_dim)))),
         keys,
     );
+    warning
+}
+
+/// The status-area line for the current Label warning: position, count, the
+/// warning itself, and how to step on.
+pub fn warning_line(app: &App) -> Option<String> {
+    let w = app.current_warning()?;
+    let n = app.warnings.len();
+    let step = if n > 1 { " · w next  W prev" } else { " · w selects it" };
+    Some(format!("⚠ {}/{n} {}{step}", app.warning_index + 1, w.line()))
 }
 
 #[cfg(test)]
@@ -463,5 +616,61 @@ mod tests {
             assert!(rect.y < hits.settings_button.y, "presets sit above Settings");
         }
         assert!(text_at(hits.settings_button).contains("Settings"));
+    }
+
+    #[test]
+    fn add_separator_button_sits_under_add_node_and_starts_adding() {
+        let dir = std::env::temp_dir().join(format!("skema-ui-addsep-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = dir.join("d.json");
+        std::fs::write(&manifest, r#"{"nodes":[],"edges":[]}"#).unwrap();
+        let mut app = crate::app::App::open(&manifest, &dir.join("d.svg"));
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        let mut hits = super::Hits::default();
+        terminal.draw(|frame| hits = super::draw(frame, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let r = hits.add_separator_button;
+        let text: String = (r.x..r.x + r.width).map(|x| buffer[(x, r.y)].symbol().to_string()).collect();
+        assert!(text.contains("Add separator"), "{text:?}");
+        assert!(r.y > hits.add_button.y, "under Add node");
+        app.press(crate::app::Button::AddSeparator);
+        assert!(matches!(app.mode, crate::app::Mode::AddSeparator { start: None }));
+    }
+
+    #[test]
+    fn copy_menu_and_warning_line_render_with_their_hit_rows() {
+        let dir = std::env::temp_dir().join(format!("skema-ui-menu-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = dir.join("d.json");
+        std::fs::write(
+            &manifest,
+            r#"{"nodes":[{"id":"a","label":"A","type":"process","size":"medium","gridPosition":{"x":0,"y":0}}],"edges":[]}"#,
+        )
+        .unwrap();
+        let mut app = crate::app::App::open(&manifest, &dir.join("d.svg"));
+        app.toggle_copy_menu();
+        app.warnings = vec![skema_core::LabelWarning {
+            code: skema_core::WarningCode::LabelTruncated,
+            kind: "node".into(),
+            id: "a".into(),
+            text: "A".into(),
+            drawn: "A".into(),
+            fits: None,
+            context: String::new(),
+        }];
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        let mut hits = super::Hits::default();
+        terminal.draw(|frame| hits = super::draw(frame, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let text_at = |r: ratatui::layout::Rect| -> String {
+            (r.x..r.x + r.width).map(|x| buffer[(x, r.y)].symbol().to_string()).collect()
+        };
+        assert!(text_at(hits.copy_button).contains("⎘ Copy ▾"));
+        let rows: Vec<String> = hits.copy_menu_rows.iter().map(|(r, _)| text_at(*r)).collect();
+        assert_eq!(rows.len(), 3);
+        assert!(rows[0].contains("PNG image") && rows[0].starts_with('▶'), "{rows:?}");
+        assert!(rows[1].contains("SVG markup"), "{rows:?}");
+        assert!(rows[2].contains("g GIF · no pulses"), "{rows:?}");
+        assert!(text_at(hits.warning_row).contains("⚠ 1/1 warning[label-truncated] node"), "{}", text_at(hits.warning_row));
     }
 }

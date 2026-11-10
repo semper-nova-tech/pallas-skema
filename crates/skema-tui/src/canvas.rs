@@ -4,9 +4,12 @@
 
 use ratatui::style::Color;
 use skema_core::style::{diagram_style, DiagramStyle};
-use skema_core::{ManifestDocument, Node, NodeSize, NodeType};
+use skema_core::{LabelPosition, ManifestDocument, Node, NodeSize, NodeType, Pulse, Separator, SeparatorStyle};
 
 use crate::geometry::{clamp_route, facing_port, port_on, ranked_ports, route, Port, Rect, Side, Zoom};
+
+/// A surface point: (column, row).
+pub type Pt = (i64, i64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
@@ -156,11 +159,6 @@ pub struct Ghost {
     pub allowed: bool,
 }
 
-enum Overlay {
-    Head { col: i64, row: i64, ch: char, color: Color },
-    Label { col: i64, row: i64, text: String, color: Color },
-}
-
 /// Everything beyond the Manifest that changes how the canvas looks.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct View<'a> {
@@ -184,6 +182,12 @@ pub struct View<'a> {
     pub link_cursor: Option<(i64, i64)>,
     /// Side the connect started from, when a handle was pressed.
     pub link_from_side: Option<Side>,
+    /// The Separator drawn bright and heavy because it is selected.
+    pub selected_separator: Option<usize>,
+    /// First end point of a Separator being added, as a Grid point.
+    pub separator_anchor: Option<(i64, i64)>,
+    /// Where each pulse is in its loop, 0.0 to 1.0. None draws no pulse (paused).
+    pub phase: Option<f64>,
     pub theme: Theme,
 }
 
@@ -198,9 +202,25 @@ pub fn draw(
     draw_view(doc, zoom, &View { selected, connect_from, ghost, theme: Theme::Phosphor, ..View::default() })
 }
 
-/// Render the Diagram at a zoom level.
+/// Render the Diagram at a zoom level. A pure function of the Manifest, the zoom,
+/// and the view (pulse phase included), so tests can draw any frame.
 pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
-    let View { selected, selected_edge, hover_node, hover_edge, connect_from, ghost, link, show_ports, link_cursor, link_from_side, theme } = *view;
+    let View {
+        selected,
+        selected_edge,
+        hover_node,
+        hover_edge,
+        connect_from,
+        ghost,
+        link,
+        show_ports,
+        link_cursor,
+        link_from_side,
+        selected_separator,
+        separator_anchor,
+        phase,
+        theme,
+    } = *view;
     let pal = palette_for(theme);
     let (bound_cols, bound_rows) = doc.grid_bounds();
     let (cols, rows) = zoom.surface_size(&doc.nodes, bound_cols, bound_rows);
@@ -215,24 +235,40 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
         }
     }
 
-    // Lines first, then every arrowhead and label, so a port shared by two
-    // Edges still shows its arrowhead.
-    let mut overlays: Vec<Overlay> = Vec::new();
+    // Separators lie under Edges and Nodes.
+    for (i, sep) in doc.separators.iter().enumerate() {
+        draw_separator(&mut s, zoom, sep, selected_separator == Some(i), &pal);
+    }
+    if let Some((x, y)) = separator_anchor {
+        let (c, r) = zoom.cell_origin(x, y);
+        s.put_fg(c, r, '◆', pal.phosphor);
+    }
+
+    // Lines, then pulses, then labels; Nodes next; arrowheads go on last, so
+    // no label, box, or Separator ever hides one.
+    let paths = edge_paths(doc, zoom);
+    let ports = all_edge_ports(doc, zoom);
     // Plain Edges first, then the highlighted ones on top.
     let mut order: Vec<usize> = (0..doc.edges.len()).collect();
     order.sort_by_key(|i| Some(*i) == hover_edge || Some(*i) == selected_edge);
-    let ports = all_edge_ports(doc, zoom);
-    for i in order {
-        let edge = &doc.edges[i];
-        let Some((src, dst)) = ports[i] else { continue };
+    let edge_color = |i: usize| if Some(i) == selected_edge { pal.phosphor } else { pal.line };
+    for &i in &order {
+        let Some(pts) = &paths[i] else { continue };
         let heavy = Some(i) == hover_edge || Some(i) == selected_edge;
-        let color = if Some(i) == selected_edge { pal.phosphor } else { pal.line };
-        overlays.extend(draw_edge_lines(&mut s, src, dst, zoom.reach(src.side), edge.label.as_deref(), color, heavy, pal.phosphor_dim));
+        draw_edge_lines(&mut s, pts, edge_color(i), heavy);
     }
-    for overlay in overlays {
-        match overlay {
-            Overlay::Head { col, row, ch, color } => s.put_fg(col, row, ch, color),
-            Overlay::Label { col, row, text, color } => s.text(col, row, &text, color, None),
+    if let Some(phase) = phase {
+        for (i, edge) in doc.edges.iter().enumerate() {
+            if let Some(cell) = paths[i].as_deref().and_then(|pts| pulse_cell(pts, edge.pulse_mode(), phase)) {
+                s.put_fg(cell.0, cell.1, PULSE_GLYPH, pal.phosphor);
+            }
+        }
+    }
+    for (i, spot) in edge_label_spots(doc, zoom, &paths).into_iter().enumerate() {
+        if let Some(spot) = spot {
+            let heavy = Some(i) == hover_edge || Some(i) == selected_edge;
+            let color = if heavy { edge_color(i) } else { pal.phosphor_dim };
+            s.text(spot.col, spot.row, &spot.text, color, None);
         }
     }
 
@@ -241,6 +277,15 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
         let is_source = connect_from == Some(node.id.as_str());
         let is_hovered = hover_node == Some(node.id.as_str());
         draw_node(&mut s, zoom, node, is_selected, is_hovered, is_source, &pal);
+    }
+    for &i in &order {
+        let Some((src, dst)) = ports[i] else { continue };
+        let color = edge_color(i);
+        s.put_fg(dst.col, dst.row, head_glyph(dst.side), color);
+        // Two-way traffic reads from the picture too: a head at each end.
+        if doc.edges[i].pulse_mode() == Pulse::Both {
+            s.put_fg(src.col, src.row, head_glyph(src.side), color);
+        }
     }
     if let Some(g) = ghost {
         draw_ghost(&mut s, zoom, g, &pal);
@@ -305,13 +350,7 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
                         }
                     }
                 }
-                let head = match dst.side {
-                    Side::Left => '▶',
-                    Side::Right => '◀',
-                    Side::Top => '▼',
-                    Side::Bottom => '▲',
-                };
-                s.put_fg(dst.col, dst.row, head, pal.phosphor);
+                s.put_fg(dst.col, dst.row, head_glyph(dst.side), pal.phosphor);
             }
         }
     }
@@ -370,31 +409,100 @@ pub fn edge_ports(doc: &ManifestDocument, zoom: &Zoom, edge: &skema_core::Edge) 
 /// The Edge whose line passes through a surface cell, if any. Nodes win over Edges,
 /// so callers check for a Node first.
 pub fn edge_at(doc: &ManifestDocument, zoom: &Zoom, col: i64, row: i64) -> Option<usize> {
-    let ports = all_edge_ports(doc, zoom);
-    (0..doc.edges.len()).rev().find_map(|i| {
-        let (src, dst) = ports[i]?;
-        let (cols, rows) = zoom.surface_size(&doc.nodes, doc.grid_bounds().0, doc.grid_bounds().1);
-        let pts = clamp_route(route(src, dst, zoom.reach(src.side)), cols, rows);
-        let on_line = pts.windows(2).any(|pair| {
-            let (a, b) = (pair[0], pair[1]);
-            (a.1 == b.1 && row == a.1 && (a.0.min(b.0)..=a.0.max(b.0)).contains(&col))
-                || (a.0 == b.0 && col == a.0 && (a.1.min(b.1)..=a.1.max(b.1)).contains(&row))
-        });
-        on_line.then_some(i)
+    let paths = edge_paths(doc, zoom);
+    (0..doc.edges.len()).rev().find(|&i| paths[i].as_deref().is_some_and(|pts| on_polyline(pts, col, row)))
+}
+
+/// The Separator whose line passes through a surface cell, if any.
+pub fn separator_at(doc: &ManifestDocument, zoom: &Zoom, col: i64, row: i64) -> Option<usize> {
+    (0..doc.separators.len()).rev().find(|&i| separator_cells(zoom, &doc.separators[i]).contains(&(col, row)))
+}
+
+fn on_polyline(pts: &[Pt], col: i64, row: i64) -> bool {
+    pts.windows(2).any(|pair| {
+        let (a, b) = (pair[0], pair[1]);
+        (a.1 == b.1 && row == a.1 && (a.0.min(b.0)..=a.0.max(b.0)).contains(&col))
+            || (a.0 == b.0 && col == a.0 && (a.1.min(b.1)..=a.1.max(b.1)).contains(&row))
     })
 }
 
-fn draw_edge_lines(s: &mut Surface, src: Port, dst: Port, reach: i64, label: Option<&str>, color: Color, heavy: bool, pal_dim: Color) -> Vec<Overlay> {
-    let mut overlays = Vec::new();
-    let (h, v) = if heavy { ('━', '┃') } else { ('─', '│') };
-    let pts = clamp_route(route(src, dst, reach), s.cols, s.rows);
-    let mut longest: Option<((i64, i64), (i64, i64))> = None;
+/// Route corners for every Edge, in Manifest order, kept on the surface.
+pub fn edge_paths(doc: &ManifestDocument, zoom: &Zoom) -> Vec<Option<Vec<Pt>>> {
+    let (bound_cols, bound_rows) = doc.grid_bounds();
+    let (cols, rows) = zoom.surface_size(&doc.nodes, bound_cols, bound_rows);
+    all_edge_ports(doc, zoom)
+        .into_iter()
+        .map(|ports| ports.map(|(src, dst)| clamp_route(route(src, dst, zoom.reach(src.side)), cols, rows)))
+        .collect()
+}
+
+/// Every cell a polyline passes through, in order from its first corner to its last.
+pub fn path_cells(pts: &[Pt]) -> Vec<Pt> {
+    let mut out: Vec<Pt> = pts.first().copied().into_iter().collect();
     for pair in pts.windows(2) {
         let (a, b) = (pair[0], pair[1]);
-        let len = (b.0 - a.0).abs() + (b.1 - a.1).abs();
-        if longest.map_or(true, |(la, lb)| len > (lb.0 - la.0).abs() + (lb.1 - la.1).abs()) {
-            longest = Some((a, b));
+        let step = ((b.0 - a.0).signum(), (b.1 - a.1).signum());
+        let mut c = a;
+        while c != b {
+            c = (c.0 + step.0, c.1 + step.1);
+            out.push(c);
         }
+    }
+    out
+}
+
+/// Glyph of the moving pulse highlight.
+pub const PULSE_GLYPH: char = '●';
+
+/// Index of the pulse along a run of `len` cells at a loop phase (0.0 to 1.0).
+/// `forward` runs source to target and starts again; `both` runs there and back.
+pub fn pulse_index(len: usize, pulse: Pulse, phase: f64) -> Option<usize> {
+    if len == 0 {
+        return None;
+    }
+    let p = phase.rem_euclid(1.0);
+    let t = match pulse {
+        Pulse::None => return None,
+        Pulse::Forward => p,
+        Pulse::Both if p < 0.5 => p * 2.0,
+        Pulse::Both => (1.0 - p) * 2.0,
+    };
+    Some(((t * len as f64) as usize).min(len - 1))
+}
+
+/// The cell the pulse lights on an Edge route. It travels the cells between the
+/// two ports, so it never covers an arrowhead.
+pub fn pulse_cell(pts: &[Pt], pulse: Pulse, phase: f64) -> Option<Pt> {
+    let cells = path_cells(pts);
+    let inner: &[Pt] = if cells.len() > 2 { &cells[1..cells.len() - 1] } else { &cells };
+    pulse_index(inner.len(), pulse, phase).map(|i| inner[i])
+}
+
+/// Whether any pulsing Edge has a cell inside a viewport rectangle of the surface.
+pub fn pulse_visible(doc: &ManifestDocument, zoom: &Zoom, viewport: Rect) -> bool {
+    if doc.edges.iter().all(|e| e.pulse_mode() == Pulse::None) {
+        return false;
+    }
+    let paths = edge_paths(doc, zoom);
+    doc.edges.iter().zip(&paths).any(|(edge, pts)| {
+        edge.pulse_mode() != Pulse::None
+            && pts.as_deref().is_some_and(|pts| path_cells(pts).iter().any(|&(c, r)| viewport.contains(c, r)))
+    })
+}
+
+fn head_glyph(side: Side) -> char {
+    match side {
+        Side::Left => '▶',
+        Side::Right => '◀',
+        Side::Top => '▼',
+        Side::Bottom => '▲',
+    }
+}
+
+fn draw_edge_lines(s: &mut Surface, pts: &[Pt], color: Color, heavy: bool) {
+    let (h, v) = if heavy { ('━', '┃') } else { ('─', '│') };
+    for pair in pts.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
         if a.1 == b.1 {
             for x in a.0.min(b.0)..=a.0.max(b.0) {
                 s.line(x, a.1, h, color);
@@ -427,27 +535,157 @@ fn draw_edge_lines(s: &mut Surface, src: Port, dst: Port, reach: i64, label: Opt
         let corner = if heavy { heavy_corner(corner) } else { corner };
         s.put_fg(b.0, b.1, corner, color);
     }
-    let head = match dst.side {
-        Side::Left => '▶',
-        Side::Right => '◀',
-        Side::Top => '▼',
-        Side::Bottom => '▲',
-    };
-    overlays.push(Overlay::Head { col: dst.col, row: dst.row, ch: head, color });
+}
 
-    if let (Some(label), Some((a, b))) = (label, longest) {
-        let text = format!(" {label} ");
-        let len = text.chars().count() as i64;
-        let label_color = if heavy { color } else { pal_dim };
-        if a.1 == b.1 {
-            let mid = (a.0 + b.0) / 2;
-            overlays.push(Overlay::Label { col: mid - len / 2, row: a.1, text, color: label_color });
-        } else {
-            let mid = (a.1 + b.1) / 2;
-            overlays.push(Overlay::Label { col: a.0 + 1, row: mid, text, color: label_color });
+/// The straight runs of a route, skipping zero-length ones.
+fn segments(pts: &[Pt]) -> Vec<(Pt, Pt)> {
+    pts.windows(2).map(|w| (w[0], w[1])).filter(|(a, b)| a != b).collect()
+}
+
+fn seg_len((a, b): (Pt, Pt)) -> i64 {
+    (b.0 - a.0).abs() + (b.1 - a.1).abs()
+}
+
+/// Two segments are shared when they lie on the same line and overlap by more
+/// than half a Grid cell.
+fn shares(zoom: &Zoom, (a, b): (Pt, Pt), (c, d): (Pt, Pt)) -> bool {
+    let overlap = |p0: i64, p1: i64, q0: i64, q1: i64| p0.max(p1).min(q0.max(q1)) - p0.min(p1).max(q0.min(q1));
+    if a.1 == b.1 && c.1 == d.1 && a.1 == c.1 {
+        2 * overlap(a.0, b.0, c.0, d.0) > zoom.cell_w
+    } else if a.0 == b.0 && c.0 == d.0 && a.0 == c.0 {
+        2 * overlap(a.1, b.1, c.1, d.1) > zoom.cell_h
+    } else {
+        false
+    }
+}
+
+/// The segment of Edge `i` that carries its label, the same rule as the SVG:
+/// `auto` takes the longest segment no other Edge shares, else the last one;
+/// `start` the first; `middle` the longest; `end` the last.
+pub fn label_segment(zoom: &Zoom, paths: &[Option<Vec<Pt>>], i: usize, position: LabelPosition) -> Option<(Pt, Pt)> {
+    let segs = segments(paths.get(i)?.as_deref()?);
+    // The first of the longest, so ties go to the earlier segment.
+    let longest = |candidates: Vec<(Pt, Pt)>| {
+        candidates.into_iter().fold(None, |best: Option<(Pt, Pt)>, seg| match best {
+            Some(b) if seg_len(b) >= seg_len(seg) => Some(b),
+            _ => Some(seg),
+        })
+    };
+    match position {
+        LabelPosition::Start => segs.first().copied(),
+        LabelPosition::End => segs.last().copied(),
+        LabelPosition::Middle => longest(segs),
+        LabelPosition::Auto => {
+            let others: Vec<(Pt, Pt)> = paths
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j != i)
+                .filter_map(|(_, p)| p.as_deref())
+                .flat_map(segments)
+                .collect();
+            let last = segs.last().copied();
+            longest(segs.into_iter().filter(|seg| !others.iter().any(|o| shares(zoom, *seg, *o))).collect()).or(last)
         }
     }
-    overlays
+}
+
+/// Where an Edge label is drawn: its first cell and the padded text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelSpot {
+    pub col: i64,
+    pub row: i64,
+    pub text: String,
+}
+
+impl LabelSpot {
+    fn rect(&self) -> Rect {
+        Rect { col: self.col, row: self.row, w: self.text.chars().count() as i64, h: 1 }
+    }
+}
+
+fn rects_overlap(a: &Rect, b: &Rect) -> bool {
+    a.col < b.col + b.w && b.col < a.col + a.w && a.row < b.row + b.h && b.row < a.row + a.h
+}
+
+/// Label spots for every Edge, in Manifest order. Each label starts at the
+/// middle of its segment and slides along it until it clears every Node box and
+/// every label placed before it; with no clear spot it stays at the middle.
+pub fn edge_label_spots(doc: &ManifestDocument, zoom: &Zoom, paths: &[Option<Vec<Pt>>]) -> Vec<Option<LabelSpot>> {
+    let boxes: Vec<Rect> = doc.nodes.iter().map(|n| zoom.node_rect(n)).collect();
+    let mut placed: Vec<Rect> = Vec::new();
+    doc.edges
+        .iter()
+        .enumerate()
+        .map(|(i, edge)| {
+            let label = edge.label.as_deref().filter(|l| !l.is_empty())?;
+            let (a, b) = label_segment(zoom, paths, i, edge.label_placement())?;
+            let text = format!(" {label} ");
+            let len = text.chars().count() as i64;
+            let horizontal = a.1 == b.1;
+            let (lo, hi) = if horizontal { (a.0.min(b.0), a.0.max(b.0)) } else { (a.1.min(b.1), a.1.max(b.1)) };
+            let mid = if horizontal { (a.0 + b.0) / 2 } else { (a.1 + b.1) / 2 };
+            let spot_at = |center: i64| {
+                if horizontal {
+                    LabelSpot { col: center - len / 2, row: a.1, text: text.clone() }
+                } else {
+                    LabelSpot { col: a.0 + 1, row: center, text: text.clone() }
+                }
+            };
+            let clear = |spot: &LabelSpot| {
+                let r = spot.rect();
+                !boxes.iter().chain(placed.iter()).any(|other| rects_overlap(&r, other))
+            };
+            let spot = (0..=(hi - lo))
+                .flat_map(|k| [mid + k, mid - k])
+                .filter(|c| (lo..=hi).contains(c))
+                .map(spot_at)
+                .find(|spot| clear(spot))
+                .unwrap_or_else(|| spot_at(mid));
+            placed.push(spot.rect());
+            Some(spot)
+        })
+        .collect()
+}
+
+/// Surface cells a Separator covers, from its `from` end to its `to` end.
+pub fn separator_cells(zoom: &Zoom, sep: &Separator) -> Vec<Pt> {
+    path_cells(&[zoom.cell_origin(sep.from.x, sep.from.y), zoom.cell_origin(sep.to.x, sep.to.y)])
+}
+
+/// Line glyph of a Separator: light solid or dashed, heavy when selected.
+pub fn separator_glyph(horizontal: bool, style: SeparatorStyle, selected: bool) -> char {
+    match (horizontal, style, selected) {
+        (true, SeparatorStyle::Solid, false) => '─',
+        (true, SeparatorStyle::Dashed, false) => '╌',
+        (false, SeparatorStyle::Solid, false) => '│',
+        (false, SeparatorStyle::Dashed, false) => '╎',
+        (true, SeparatorStyle::Solid, true) => '━',
+        (true, SeparatorStyle::Dashed, true) => '┅',
+        (false, SeparatorStyle::Solid, true) => '┃',
+        (false, SeparatorStyle::Dashed, true) => '┇',
+    }
+}
+
+/// A Separator in the dim color (bright when selected), its label on the line at its start.
+fn draw_separator(s: &mut Surface, zoom: &Zoom, sep: &Separator, selected: bool, pal: &Palette) {
+    let ch = separator_glyph(sep.is_horizontal(), sep.style, selected);
+    let color = if selected { pal.phosphor } else { pal.phosphor_dim };
+    for (c, r) in separator_cells(zoom, sep) {
+        s.put_fg(c, r, ch, color);
+    }
+    if let Some(label) = sep.label.as_deref().filter(|l| !l.is_empty()) {
+        let text = format!(" {label} ");
+        let len = text.chars().count() as i64;
+        let (c0, r0) = zoom.cell_origin(sep.from.x, sep.from.y);
+        let (col, row) = if sep.is_horizontal() {
+            if sep.to.x >= sep.from.x { (c0 + 1, r0) } else { (c0 - len, r0) }
+        } else if sep.to.y >= sep.from.y {
+            (c0, r0 + 1)
+        } else {
+            (c0, r0 - 1)
+        };
+        s.text(col, row, &text, color, Some(pal.canvas));
+    }
 }
 
 fn heavy_corner(c: char) -> char {
@@ -735,7 +973,7 @@ mod tests {
         assert_eq!(s.get(c + 1, r).unwrap().fg, palette().phosphor);
         let blocked = Ghost { x: 6, y: 4, size: NodeSize::Medium, allowed: false };
         let s = draw(&doc, &Z, Some("start"), None, Some(blocked));
-        assert_eq!(s.get(c + Z.medium / 2, r + 1).unwrap().ch, '✗');
+        assert_eq!(s.get(c + Z.node_width(NodeSize::Medium) / 2, r + 1).unwrap().ch, '✗');
         assert_eq!(s.get(c + 1, r).unwrap().fg, palette().phosphor_dim);
     }
 
@@ -886,6 +1124,169 @@ mod tests {
     fn long_labels_are_truncated_with_an_ellipsis() {
         assert_eq!(fit("Remember: no execution", 18), "Remember: no exec…");
         assert_eq!(fit("short", 18), "short");
+    }
+
+    #[test]
+    fn an_arrowhead_is_never_covered_by_a_node_label() {
+        // Overview zoom 1 draws one-row bracketed boxes with the label on the box
+        // row. `wide` (3×1) reaches B's left port column, so its label lands there.
+        let doc = parse_manifest(
+            r#"{"nodes":[
+              {"id":"wide","label":"A label long enough to fill the box","type":"process","size":{"columns":3,"rows":1},"gridPosition":{"x":0,"y":1}},
+              {"id":"b","label":"B","type":"process","size":"medium","gridPosition":{"x":3,"y":1}},
+              {"id":"c","label":"C","type":"process","size":"medium","gridPosition":{"x":3,"y":4}}
+            ],"edges":[{"from":"c","to":"b","toSide":"left"}]}"#,
+        )
+        .unwrap();
+        let z = ZOOMS[1];
+        let wide = z.node_rect(&doc.nodes[0]);
+        let b = z.node_rect(&doc.nodes[1]);
+        let port = port_on(&b, Side::Left);
+        assert!(wide.contains(port.col, port.row), "the port lies on wide's label row");
+        let s = draw(&doc, &z, None, None, None);
+        assert_eq!(s.get(port.col, port.row).unwrap().ch, '▶');
+
+        // A top port: the head sits on the row above the label border and stays.
+        let doc = parse_manifest(
+            r#"{"nodes":[
+              {"id":"a","label":"Source","type":"process","size":"medium","gridPosition":{"x":1,"y":0}},
+              {"id":"t","label":"A target with a long label","type":"process","size":{"columns":2,"rows":2},"gridPosition":{"x":1,"y":3}}
+            ],"edges":[{"from":"a","to":"t","label":"down"}]}"#,
+        )
+        .unwrap();
+        for z in &ZOOMS {
+            let t = z.node_rect(&doc.nodes[1]);
+            let top = port_on(&t, Side::Top);
+            let s = draw(&doc, z, Some("t"), None, None);
+            assert_eq!(s.get(top.col, top.row).unwrap().ch, '▼', "zoom {z:?}");
+            assert_eq!(top.row, t.row - 1, "the head points at the label row, not into it");
+        }
+    }
+
+    #[test]
+    fn a_two_way_pulse_gets_an_arrowhead_at_both_ends() {
+        let mut doc = parse_manifest(
+            r#"{"nodes":[
+              {"id":"a","label":"A","type":"process","size":"medium","gridPosition":{"x":0,"y":0}},
+              {"id":"b","label":"B","type":"process","size":"medium","gridPosition":{"x":5,"y":0}}
+            ],"edges":[{"from":"a","to":"b"}]}"#,
+        )
+        .unwrap();
+        let (src, dst) = edge_ports(&doc, &Z, &doc.edges[0]).unwrap();
+        let s = draw(&doc, &Z, None, None, None);
+        assert_eq!((s.get(src.col, src.row).unwrap().ch, s.get(dst.col, dst.row).unwrap().ch), ('─', '▶'));
+        doc.edges[0].pulse = Some(Pulse::Forward);
+        let s = draw(&doc, &Z, None, None, None);
+        assert_eq!(s.get(src.col, src.row).unwrap().ch, '─', "forward keeps one head");
+        doc.edges[0].pulse = Some(Pulse::Both);
+        let s = draw(&doc, &Z, None, None, None);
+        assert_eq!((s.get(src.col, src.row).unwrap().ch, s.get(dst.col, dst.row).unwrap().ch), ('◀', '▶'));
+    }
+
+    #[test]
+    fn pulse_position_follows_the_phase() {
+        assert_eq!(pulse_index(10, Pulse::Forward, 0.0), Some(0));
+        assert_eq!(pulse_index(10, Pulse::Forward, 0.5), Some(5));
+        assert_eq!(pulse_index(10, Pulse::Forward, 0.999), Some(9));
+        assert_eq!(pulse_index(10, Pulse::Both, 0.0), Some(0));
+        assert_eq!(pulse_index(10, Pulse::Both, 0.5), Some(9), "both reaches the target at half the loop");
+        assert_eq!(pulse_index(10, Pulse::Both, 0.75), Some(5), "and comes back");
+        assert_eq!(pulse_index(10, Pulse::None, 0.5), None);
+        assert_eq!(pulse_index(0, Pulse::Forward, 0.5), None);
+
+        let mut doc = parse_manifest(
+            r#"{"nodes":[
+              {"id":"a","label":"A","type":"process","size":"medium","gridPosition":{"x":0,"y":0}},
+              {"id":"b","label":"B","type":"process","size":"medium","gridPosition":{"x":5,"y":0}}
+            ],"edges":[{"from":"a","to":"b","pulse":"forward"}]}"#,
+        )
+        .unwrap();
+        let pts = edge_paths(&doc, &Z)[0].clone().unwrap();
+        let cells = path_cells(&pts);
+        let inner = &cells[1..cells.len() - 1];
+        let at = |doc: &ManifestDocument, phase: Option<f64>| {
+            let s = draw_view(doc, &Z, &View { phase, theme: Theme::Phosphor, ..View::default() });
+            cells.iter().position(|&(c, r)| s.get(c, r).unwrap().ch == PULSE_GLYPH)
+        };
+        assert_eq!(at(&doc, Some(0.0)), Some(1), "starts beside the source port");
+        assert_eq!(at(&doc, Some(0.5)), Some(1 + inner.len() / 2));
+        assert_eq!(at(&doc, None), None, "paused draws no pulse");
+        doc.edges[0].pulse = Some(Pulse::Both);
+        assert_eq!(at(&doc, Some(0.0)), Some(1));
+        assert_eq!(at(&doc, Some(0.5)), Some(cells.len() - 2), "both turns at the target");
+        let s = draw_view(&doc, &Z, &View { phase: Some(0.5), theme: Theme::Phosphor, ..View::default() });
+        assert_eq!(s.get(cells[cells.len() - 1].0, cells[cells.len() - 1].1).unwrap().ch, '▶', "never over a head");
+        assert!(pulse_visible(&doc, &Z, Rect { col: 0, row: 0, w: 200, h: 50 }));
+        assert!(!pulse_visible(&doc, &Z, Rect { col: 0, row: 30, w: 200, h: 5 }), "scrolled away");
+        doc.edges[0].pulse = None;
+        assert!(!pulse_visible(&doc, &Z, Rect { col: 0, row: 0, w: 200, h: 50 }));
+    }
+
+    #[test]
+    fn separators_draw_solid_or_dashed_with_the_label_at_the_start() {
+        let doc = parse_manifest(
+            r#"{"nodes":[
+              {"id":"a","label":"A","type":"process","size":"medium","gridPosition":{"x":0,"y":0}}
+            ],"edges":[],
+            "separators":[
+              {"id":"h","from":{"x":0,"y":3},"to":{"x":8,"y":3},"style":"solid","label":"AWS"},
+              {"id":"v","from":{"x":10,"y":0},"to":{"x":10,"y":6},"style":"dashed"}
+            ]}"#,
+        )
+        .unwrap();
+        let s = draw(&doc, &Z, None, None, None);
+        let (c, r) = Z.cell_origin(6, 3);
+        assert_eq!(s.get(c, r).unwrap().ch, '─');
+        let (c, r) = Z.cell_origin(10, 4);
+        assert_eq!(s.get(c, r).unwrap().ch, '╎');
+        let (c0, r0) = Z.cell_origin(0, 3);
+        assert!(s.lines()[r0 as usize][..].contains("─ AWS ─"), "{}", s.lines()[r0 as usize]);
+        assert_eq!(s.get(c0 + 2, r0).unwrap().ch, 'A', "label starts at the from end");
+        assert_eq!(separator_at(&doc, &Z, c, r), Some(1));
+        assert_eq!(separator_at(&doc, &Z, c + 1, r), None);
+        // Selected: heavy glyphs.
+        let s = draw_view(&doc, &Z, &View { selected_separator: Some(1), theme: Theme::Phosphor, ..View::default() });
+        assert_eq!(s.get(c, r).unwrap().ch, '┇');
+        assert_eq!(separator_glyph(true, SeparatorStyle::Dashed, false), '╌');
+        assert_eq!(separator_glyph(false, SeparatorStyle::Solid, false), '│');
+    }
+
+    #[test]
+    fn edge_labels_follow_label_position_and_avoid_shared_segments() {
+        // a → b and a → c leave a's right port together, so their first runs are shared.
+        let mut doc = parse_manifest(
+            r#"{"nodes":[
+              {"id":"a","label":"A","type":"process","size":"medium","gridPosition":{"x":0,"y":3}},
+              {"id":"b","label":"B","type":"process","size":"medium","gridPosition":{"x":8,"y":0}},
+              {"id":"c","label":"C","type":"process","size":"medium","gridPosition":{"x":8,"y":6}}
+            ],"edges":[{"from":"a","to":"b","label":"up"},{"from":"a","to":"c","label":"down"}]}"#,
+        )
+        .unwrap();
+        let paths = edge_paths(&doc, &Z);
+        let segs = segments(paths[0].as_deref().unwrap());
+        assert_eq!(segs.len(), 3, "{segs:?}");
+        assert_eq!(label_segment(&Z, &paths, 0, LabelPosition::Start), Some(segs[0]));
+        assert_eq!(label_segment(&Z, &paths, 0, LabelPosition::End), Some(segs[2]));
+        let longest = *segs.iter().max_by_key(|s| seg_len(**s)).unwrap();
+        assert_eq!(seg_len(label_segment(&Z, &paths, 0, LabelPosition::Middle).unwrap()), seg_len(longest));
+        let auto = label_segment(&Z, &paths, 0, LabelPosition::Auto).unwrap();
+        assert_ne!(auto, segs[0], "the shared first run is skipped");
+        // The drawn label sits on the chosen segment, clear of every box.
+        doc.edges[0].label_position = Some(LabelPosition::End);
+        let spots = edge_label_spots(&doc, &Z, &paths);
+        let spot = spots[0].clone().unwrap();
+        let (a, b) = segs[2];
+        if a.1 == b.1 {
+            assert_eq!(spot.row, a.1, "{spot:?} on {:?}", segs[2]);
+        } else {
+            assert_eq!(spot.col, a.0 + 1, "{spot:?} beside {:?}", segs[2]);
+            assert!((a.1.min(b.1)..=a.1.max(b.1)).contains(&spot.row));
+        }
+        for n in &doc.nodes {
+            assert!(!rects_overlap(&spot.rect(), &Z.node_rect(n)), "{spot:?} over {}", n.id);
+        }
+        let s = draw(&doc, &Z, None, None, None);
+        assert!(s.lines()[spot.row as usize].contains(" up "));
     }
 }
 
