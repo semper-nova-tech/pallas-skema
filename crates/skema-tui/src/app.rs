@@ -2141,6 +2141,7 @@ mod tests {
             text: "long text".into(),
             drawn: "long…".into(),
             fits: Some(5),
+            context: String::new(),
         };
         app.warnings = vec![warn("node", "b"), warn("edge", "a→b"), warn("separator", "sep-1"), warn("diagram", "")];
         app.warning_index = 0;

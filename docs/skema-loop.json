@@ -3,9 +3,12 @@
     {
       "id": "agent",
       "label": "Agent",
-      "description": "edits files · runs skema render",
+      "description": "edits files \u00b7 runs skema render",
       "type": "process",
-      "size": "medium",
+      "size": {
+        "columns": 2,
+        "rows": 2
+      },
       "gridPosition": {
         "x": 0,
         "y": 0
@@ -16,7 +19,10 @@
       "label": "JSON Manifest",
       "description": "Source of Truth",
       "type": "note",
-      "size": "large",
+      "size": {
+        "columns": 3,
+        "rows": 2
+      },
       "gridPosition": {
         "x": 4,
         "y": 0
@@ -25,9 +31,12 @@
     {
       "id": "render",
       "label": "skema render",
-      "description": "validate first · same input, same picture",
+      "description": "validate first \u00b7 same input, same picture",
       "type": "decision",
-      "size": "medium",
+      "size": {
+        "columns": 2,
+        "rows": 2
+      },
       "gridPosition": {
         "x": 9,
         "y": 0
@@ -79,11 +88,13 @@
     {
       "from": "person",
       "to": "manifest",
-      "label": "arranges · autosaves"
+      "label": "arranges \u00b7 autosaves"
     },
     {
       "from": "person",
-      "to": "agent"
+      "to": "agent",
+      "fromSide": "left",
+      "toSide": "bottom"
     }
   ]
 }

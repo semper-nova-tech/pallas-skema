@@ -631,6 +631,7 @@ mod tests {
             text: "A".into(),
             drawn: "A".into(),
             fits: None,
+            context: String::new(),
         }];
         let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
         let mut hits = super::Hits::default();
