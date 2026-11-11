@@ -17,3 +17,7 @@ install-path = "~/.local/bin"
 hosting = "github"
 # Whether to install an updater program
 install-updater = false
+
+# GitHub retired the macos-14 runner that dist picks for Apple Silicon.
+[dist.github-custom-runners]
+aarch64-apple-darwin = "macos-15"
