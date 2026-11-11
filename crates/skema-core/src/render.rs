@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::layout::{layout, Layout, Port, PxRect, Side, PULSE_LEN};
-use crate::manifest::{ManifestDocument, NodeType, Pulse, SeparatorStyle};
+use crate::manifest::{ManifestDocument, Node, NodeType, Pulse, SeparatorStyle};
 use crate::raster::PULSE_PERIOD_MS;
 use crate::style::DiagramStyle;
 use crate::svg::SvgOutput;
@@ -161,7 +161,7 @@ fn build_svg_at(manifest: &ManifestDocument, style: &DiagramStyle, frame: Option
         out.push_str(&format!(
             r#"<line id="separator-{}" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{}" stroke-width="1.5"{dash}/>"#,
             escape_xml(&s.sep.id),
-            color.frame,
+            color.accent_or(s.sep.color, &color.frame),
         ));
         out.push('\n');
     }
@@ -177,7 +177,8 @@ fn build_svg_at(manifest: &ManifestDocument, style: &DiagramStyle, frame: Option
         out.push_str(&format!("<g><title>{}</title>", escape_xml(&tip)));
         out.push_str(&format!(
             r#"<path d="{d}" fill="none" stroke="{}" stroke-width="{}" stroke-linejoin="round"/>"#,
-            color.line, style.edge_width,
+            color.accent_or(e.edge.color, &color.line),
+            style.edge_width,
         ));
         out.push_str(&format!(r#"<path d="{d}" fill="none" stroke="transparent" stroke-width="12"/>"#));
         out.push_str("</g>\n");
@@ -209,12 +210,12 @@ fn build_svg_at(manifest: &ManifestDocument, style: &DiagramStyle, frame: Option
     let size = style.edge_label_size;
     for e in &layout.edges {
         if let Some(l) = &e.label {
-            push_label(&mut out, style, l.rect, &l.fitted.drawn, size, color.canvas.as_str());
+            push_label(&mut out, style, l.rect, &l.fitted.drawn, size, &color.phosphor_dim);
         }
     }
     for s in &layout.separators {
         if let Some(l) = &s.label {
-            push_label(&mut out, style, l.rect, &l.fitted.drawn, size, color.canvas.as_str());
+            push_label(&mut out, style, l.rect, &l.fitted.drawn, size, color.accent_or(s.sep.color, &color.phosphor_dim));
         }
     }
 
@@ -223,7 +224,7 @@ fn build_svg_at(manifest: &ManifestDocument, style: &DiagramStyle, frame: Option
     for n in &layout.nodes {
         let node = n.node;
         let (x, y, w, h) = n.rect;
-        let (stroke, label_fill, meta_fill) = node_colors(style);
+        let (stroke, label_fill, meta_fill) = node_colors(style, node);
         let rx = if node.node_type == NodeType::Decision { style.radius * 2 } else { style.radius };
         out.push_str(&format!(r#"<g id="node-{}" aria-label="{}">"#, escape_xml(&node.id), escape_xml(&node.label)));
         // Hover tooltip: the full label and description, which the box may cut short.
@@ -267,7 +268,7 @@ fn build_svg_at(manifest: &ManifestDocument, style: &DiagramStyle, frame: Option
     // Arrowheads last, so no box, label, or background ever covers one (FR-10).
     for e in &layout.edges {
         for head in &e.heads {
-            out.push_str(&arrowhead(*head, color.line.as_str(), style.edge_head));
+            out.push_str(&arrowhead(*head, color.accent_or(e.edge.color, &color.line), style.edge_head));
         }
         out.push('\n');
     }
@@ -277,14 +278,15 @@ fn build_svg_at(manifest: &ManifestDocument, style: &DiagramStyle, frame: Option
 }
 
 /// A small label on a background box that breaks the line beneath it.
-fn push_label(out: &mut String, style: &DiagramStyle, (bx, by, w, h): PxRect, text: &str, size: i64, bg: &str) {
-    out.push_str(&format!(r#"<rect x="{bx}" y="{by}" width="{w}" height="{h}" fill="{bg}"/>"#));
+/// The box takes the canvas color; the text takes `fill`.
+fn push_label(out: &mut String, style: &DiagramStyle, (bx, by, w, h): PxRect, text: &str, size: i64, fill: &str) {
+    out.push_str(&format!(r#"<rect x="{bx}" y="{by}" width="{w}" height="{h}" fill="{}"/>"#, style.color.canvas));
     out.push_str(&format!(
         r#"<text x="{}" y="{}" text-anchor="middle" dominant-baseline="middle" font-family="{}" font-size="{size}" fill="{}">{}</text>"#,
         bx + w / 2,
         by + h / 2,
         style.font_family,
-        style.color.phosphor_dim,
+        fill,
         escape_xml(text),
     ));
     out.push('\n');
@@ -303,9 +305,10 @@ fn arrowhead(port: Port, fill: &str, size: i64) -> String {
     format!(r#"<polygon points="{points}" fill="{fill}"/>"#)
 }
 
-fn node_colors(style: &DiagramStyle) -> (&str, &str, &str) {
+fn node_colors<'a>(style: &'a DiagramStyle, node: &Node) -> (&'a str, &'a str, &'a str) {
     let color = &style.color;
-    (&color.phosphor, &color.phosphor, &color.phosphor_dim)
+    let accent = color.accent_or(node.color, &color.phosphor);
+    (accent, accent, &color.phosphor_dim)
 }
 
 fn font_faces() -> &'static str {
@@ -373,6 +376,7 @@ mod tests {
                     node_type: NodeType::Process,
                     size: NodeSize::Medium,
                     grid_position: GridPosition { x: 0, y: 0 },
+                    color: None,
                 },
                 Node {
                     id: "decide".into(),
@@ -381,6 +385,7 @@ mod tests {
                     node_type: NodeType::Decision,
                     size: NodeSize::Small,
                     grid_position: GridPosition { x: 2, y: 0 },
+                    color: None,
                 },
             ],
             edges: vec![Edge { label: Some("next".into()), ..Edge::new("start", "decide") }],
@@ -452,6 +457,33 @@ mod tests {
         doc.nodes[1].grid_position = GridPosition { x: 2, y: 3 };
         let svg = build_svg(&doc, crate::style::diagram_style());
         assert!(svg.contains(r#"<path d="M132 56 L104 56 L104 224 L132 224""#), "{svg}");
+    }
+
+    #[test]
+    fn colored_elements_take_the_theme_shade_of_their_accent() {
+        use crate::manifest::{Accent, Separator, SeparatorStyle};
+        let style = crate::theme::resolve_style(crate::theme::Theme::Latte);
+        let mut doc = sample();
+        let plain = build_svg(&doc, &style);
+        doc.nodes[0].color = Some(Accent::Red);
+        doc.edges[0].color = Some(Accent::Green);
+        doc.separators.push(Separator {
+            id: "s".into(),
+            from: GridPosition { x: 0, y: 2 },
+            to: GridPosition { x: 4, y: 2 },
+            style: SeparatorStyle::Solid,
+            label: Some("zone".into()),
+            color: Some(Accent::Blue),
+        });
+        let svg = build_svg(&doc, &style);
+        let a = &style.color.accents;
+        assert!(!plain.contains(&a.red) && !plain.contains(&a.green));
+        assert!(svg.contains(&format!(r#"stroke="{}" stroke-width="1""#, a.red)), "Node border");
+        assert!(svg.contains(&format!(r#"fill="{}"/>"#, a.green)), "arrowhead");
+        assert!(svg.contains(&format!(r#"stroke="{}" stroke-width="1.5""#, a.blue)), "Separator line");
+        let json = crate::manifest::serialize_manifest(&doc);
+        assert!(json.contains(r#""color": "red""#) && json.contains(r#""color": "blue""#));
+        assert_eq!(crate::manifest::parse_manifest(&json).unwrap(), doc);
     }
 
     #[test]

@@ -43,6 +43,14 @@
     "phosphorDim": "#769676",
     "dot": "#55805a",
     "line": "#85b286",
-    "frame": "#365036"
+    "frame": "#365036",
+    "accents": {
+      "red": "#e06c75",
+      "yellow": "#e5c07b",
+      "green": "#98c379",
+      "cyan": "#56b6c2",
+      "blue": "#61afef",
+      "magenta": "#c678dd"
+    }
   }
 }

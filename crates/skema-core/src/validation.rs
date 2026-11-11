@@ -229,6 +229,7 @@ mod tests {
             node_type: NodeType::Process,
             size: NodeSize::Medium,
             grid_position: GridPosition { x, y },
+            color: None,
         }
     }
 
@@ -275,6 +276,7 @@ mod tests {
             to: GridPosition { x: to.0, y: to.1 },
             style: SeparatorStyle::Dashed,
             label: None,
+            color: None,
         }
     }
 

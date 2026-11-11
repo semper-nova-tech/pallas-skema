@@ -128,7 +128,7 @@ manifests, and the "needs `skema` X or newer" line in
 push a matching tag:
 
 ```bash
-git tag v0.3.0 && git push origin v0.3.0
+git tag v0.3.1 && git push origin v0.3.1
 ```
 
 Tag right after the version bump merges to `master`. The skill and plugin
@@ -155,7 +155,7 @@ skema render --manifest flow.json --svg flow.svg --png flow.png   # also a PNG
 
 `skema validate --manifest flow.json` checks without writing anything. The PNG
 is rasterized from the same SVG with the same embedded font, at 2 pixels per
-SVG unit. `--theme phosphor|nord|terminal` overrides the remembered theme for
+SVG unit. `--theme phosphor|nord|tokyo|mocha|contrast|latte|tokyo-day|terminal` overrides the remembered theme for
 one render.
 
 ## Editor (terminal)
@@ -190,8 +190,12 @@ skema open-editor --manifest flow.json --svg flow.svg
   the files on disk are always valid. `s` forces a save. Pass `--manual-save`
   to write only on `s`. `q` saves before quitting; only a Diagram that fails
   Validation stays open, and a second `q` discards it.
+- `o` gives the selected Node, Edge, or Separator its own color: red, yellow,
+  green, cyan, blue, magenta, then back to the theme's. It is saved as
+  `"color"` in the Manifest, and each theme supplies its own shade.
 - Settings, under the buttons, picks the theme: Phosphor (the original green),
-  Nord, or Match terminal, which uses the terminal's own ANSI colors so
+  Nord, Tokyo Night, Mocha (Catppuccin), High contrast, the light Latte
+  (Catppuccin) and Tokyo Day, or Match terminal, which uses the terminal's own ANSI colors so
   Ghostty's theme shows through. `T` cycles. The choice is kept in
   `~/.config/skema/theme`, and the SVG and PNG follow it: the Editor
   re-renders on a switch, Copy image uses it, and `skema render` reads the

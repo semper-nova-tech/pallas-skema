@@ -13,7 +13,7 @@ pub mod warnings;
 
 pub use grid::{Grid, GridPosition};
 pub use manifest::{
-    parse_manifest, serialize_manifest, CanvasSize, Edge, LabelPosition, ManifestDocument, Node, NodeSize, NodeType, Pulse, Separator,
+    parse_manifest, serialize_manifest, Accent, CanvasSize, Edge, LabelPosition, ManifestDocument, Node, NodeSize, NodeType, Pulse, Separator,
     SeparatorStyle, Side, SizeKeyword, MAX_FOOTPRINT, MIN_FOOTPRINT,
 };
 pub use raster::{
@@ -21,7 +21,7 @@ pub use raster::{
     render_png_with, svg_to_png, GIF_FRAMES, GIF_SCALE, PNG_SCALE, PULSE_PERIOD_MS,
 };
 pub use render::{render_manifest, render_manifest_with, render_svg_string, render_svg_string_with};
-pub use style::{DiagramStyle, StyleColor};
+pub use style::{Accents, DiagramStyle, StyleColor};
 pub use theme::{current_style, resolve_style, Theme};
 pub use svg::SvgOutput;
 pub use validation::{format_text_failure, separator_crosses, validate_manifest, TextFailure};
