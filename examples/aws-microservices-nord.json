@@ -1,0 +1,200 @@
+{
+  "canvas": {
+    "columns": 24,
+    "rows": 14
+  },
+  "nodes": [
+    {
+      "id": "client",
+      "label": "Web client",
+      "description": "front-end SPA",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 8,
+        "y": 1
+      }
+    },
+    {
+      "id": "apigw",
+      "label": "API Gateway",
+      "description": "AWS",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 8,
+        "y": 4
+      }
+    },
+    {
+      "id": "authorizer",
+      "label": "Authorizer",
+      "description": "Lambda",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 13,
+        "y": 4
+      },
+      "color": "magenta"
+    },
+    {
+      "id": "svc_a",
+      "label": "Service A",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 3,
+        "y": 7
+      }
+    },
+    {
+      "id": "svc_b",
+      "label": "Service B",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 8,
+        "y": 7
+      }
+    },
+    {
+      "id": "svc_c",
+      "label": "Service C",
+      "description": "search-backed",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 13,
+        "y": 7
+      }
+    },
+    {
+      "id": "search",
+      "label": "Search index",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 18,
+        "y": 7
+      },
+      "color": "green"
+    },
+    {
+      "id": "db",
+      "label": "Shared DB",
+      "description": "all services",
+      "type": "process",
+      "size": {
+        "columns": 2,
+        "rows": 2
+      },
+      "gridPosition": {
+        "x": 8,
+        "y": 10
+      },
+      "color": "yellow"
+    },
+    {
+      "id": "cron",
+      "label": "Indexer cron",
+      "description": "scheduled job",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 18,
+        "y": 10
+      },
+      "color": "green"
+    }
+  ],
+  "edges": [
+    {
+      "from": "client",
+      "to": "apigw",
+      "label": "HTTPS",
+      "pulse": "both"
+    },
+    {
+      "from": "apigw",
+      "to": "authorizer",
+      "label": "authorize",
+      "pulse": "both",
+      "color": "magenta"
+    },
+    {
+      "from": "apigw",
+      "to": "svc_a",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "apigw",
+      "to": "svc_b",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "apigw",
+      "to": "svc_c",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "svc_a",
+      "to": "db",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "svc_b",
+      "to": "db",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "svc_c",
+      "to": "db",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "svc_c",
+      "to": "search",
+      "label": "query",
+      "color": "green"
+    },
+    {
+      "from": "cron",
+      "to": "db",
+      "label": "read",
+      "fromSide": "left",
+      "toSide": "right",
+      "color": "green"
+    },
+    {
+      "from": "cron",
+      "to": "search",
+      "label": "index",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "pulse": "forward",
+      "color": "green"
+    }
+  ],
+  "separators": [
+    {
+      "id": "aws",
+      "from": {
+        "x": 2,
+        "y": 3
+      },
+      "to": {
+        "x": 21,
+        "y": 3
+      },
+      "style": "dashed",
+      "label": "AWS"
+    }
+  ]
+}

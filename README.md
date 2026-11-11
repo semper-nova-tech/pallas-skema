@@ -30,6 +30,10 @@ a terminal Editor, or in a Herdr pane beside the agent, and rearranges by hand. 
 
 ![The Skema loop: an agent edits the JSON manifest, skema render validates and draws the picture, a person reviews and arranges it in the terminal Editor, and the file round-trips](docs/skema-loop.png)
 
+![An AWS microservices diagram in the Nord theme, with pulsing edges and a few elements colored to group them](examples/aws-microservices-nord.gif)
+
+The same Manifest renders in any theme (Phosphor, Nord, Tokyo Night, Mocha, High contrast, Latte, Tokyo Day, or your terminal's own colors), and any Node, Edge, or Separator can take its own color.
+
 - Invalid diagrams dont render. Validation displays the broken rule and leaves
   the last good picture.
 - The same manifest always produces the same SVG, so diffs are small and
