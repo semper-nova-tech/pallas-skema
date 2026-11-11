@@ -22,7 +22,7 @@ which redraws when the file changes.
 command -v skema || ls ~/.local/bin/skema || ls target/release/skema
 ```
 
-Use the first one found. This skill needs `skema` 0.3.0 or newer; check with
+Use the first one found. This skill needs `skema` 0.3.1 or newer; check with
 `skema --version`. A binary that rejects `--version` is older than that.
 
 If none exists, or it is older, tell the user and offer the one-line install,
@@ -83,6 +83,9 @@ Rules the validator enforces. Design to them instead of discovering them by fail
   which segment of the Edge carries its label.
 - `pulse` (optional) is `none` (default), `forward` (one way), or `both`
   (back and forth: two-way traffic). A `both` Edge has an arrowhead at each end.
+- `color` (optional, on a Node, Edge, or Separator) is `red`, `yellow`,
+  `green`, `cyan`, `blue`, or `magenta`. Each theme supplies its own shade, so
+  it stays readable on light and dark themes. Absent means the theme's color.
 - `separators` (optional) are lines on Grid lines: `from` and `to` share an x
   (vertical) or a y (horizontal), `style` is `solid` (default) or `dashed`,
   `label` is optional. A Separator may not touch a Node footprint; Edges may
@@ -196,6 +199,13 @@ Renders use the theme the person chose in the Editor (kept in
 `~/.config/skema/theme`); with no choice it is Match terminal, which is
 Phosphor until the Editor has cached the terminal's colors. Do not pass
 `--theme` unless they ask for a specific one.
+
+Leave `color` off by default: the theme's own colors already keep Nodes and
+Edges apart. After the first render, you may offer once, in one line, to
+personalize: switch the theme (`phosphor`, `nord`, `tokyo`, `mocha`,
+`contrast`, `latte`, `tokyo-day`; the person picks in Editor Settings or
+with `T`) or color a few elements, such as one path or one tier. Add `color`
+only when they say yes or ask for it, and keep colors they set in the Editor.
 
 ## Open the Editor
 

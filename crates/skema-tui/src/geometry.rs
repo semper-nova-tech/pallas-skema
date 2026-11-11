@@ -323,6 +323,7 @@ mod tests {
             node_type: NodeType::Process,
             size,
             grid_position: GridPosition { x, y },
+            color: None,
         }
     }
 

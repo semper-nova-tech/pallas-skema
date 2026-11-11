@@ -26,6 +26,7 @@ Actors are confirmed in [PERSONAS.md](PERSONAS.md).
 | Command-line tool | The local program that validates a Manifest, renders an SVG, and owns the Editor window. It accepts close and save requests for that window. | browser, hosted service |
 | Herdr | An optional local pane host that may show the Editor window. The Editor does not require it. | required shell, Pallas Agent Flow worker |
 | Separator | A solid or dashed horizontal or vertical line on Grid lines, with an optional label, marking a boundary or tier. It never crosses a Node. | group, container, swimlane box |
+| Accent | An optional named color (`red`, `yellow`, `green`, `cyan`, `blue`, `magenta`) on one Node, Edge, or Separator. Each theme supplies its shade. | hex color, custom style |
 | Pulse | An optional animation on an Edge: `forward` (one way) or `both` (back and forth, meaning two-way traffic). | flow animation, marching ants |
 | Label warning | A non-blocking stderr message saying a label was shortened, overlaps something, or the Diagram is off-center. `--strict` makes it a failure. | lint error, Validation failure |
 | Copy menu | The Editor menu that copies the Diagram as PNG, SVG, or GIF. | export dialog |

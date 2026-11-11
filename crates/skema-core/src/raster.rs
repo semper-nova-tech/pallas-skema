@@ -204,8 +204,8 @@ fn changed_rect(prev: &[u8], next: &[u8], w: usize) -> Option<(usize, usize, usi
     b
 }
 
-/// A fixed palette from the theme: each color, and 15 anti-aliasing steps from
-/// the canvas and the Node fill toward each foreground color.
+/// A fixed palette from the theme: each color, 15 anti-aliasing steps from the
+/// canvas and the Node fill toward each foreground color, and 5 toward each accent.
 fn gif_palette(color: &StyleColor) -> Vec<[u8; 3]> {
     let bgs = [rgb(&color.canvas), rgb(&color.node_fill)];
     let fgs = [&color.phosphor, &color.phosphor_dim, &color.line, &color.dot, &color.frame, &color.node_fill].map(|c| rgb(c));
@@ -215,12 +215,15 @@ fn gif_palette(color: &StyleColor) -> Vec<[u8; 3]> {
             out.push(c);
         }
     };
-    bgs.iter().chain(fgs.iter()).for_each(|c| push(*c));
-    for bg in bgs {
-        for fg in fgs {
-            for k in 1..16u32 {
-                let mix = |i: usize| ((bg[i] as u32 * (16 - k) + fg[i] as u32 * k + 8) / 16) as u8;
-                push([mix(0), mix(1), mix(2)]);
+    let accents = color.accents.all().map(rgb);
+    bgs.iter().chain(fgs.iter()).chain(accents.iter()).for_each(|c| push(*c));
+    for (steps, set) in [(16u32, &fgs[..]), (6, &accents[..])] {
+        for bg in bgs {
+            for fg in set {
+                for k in 1..steps {
+                    let mix = |i: usize| ((bg[i] as u32 * (steps - k) + fg[i] as u32 * k + steps / 2) / steps) as u8;
+                    push([mix(0), mix(1), mix(2)]);
+                }
             }
         }
     }

@@ -33,10 +33,15 @@ pub fn query_palette() -> Option<StyleColor> {
         .ok()?;
     // Replies only reach a reader in raw mode; a cooked tty holds them until a newline.
     let _raw = RawGuard::new(&tty)?;
-    const QUERIES: [(&str, &str); 5] = [
+    const QUERIES: [(&str, &str); 10] = [
         ("\x1b]11;?\x1b\\", "11;"),
         ("\x1b]10;?\x1b\\", "10;"),
         ("\x1b]4;0;?\x1b\\", "4;0;"),
+        ("\x1b]4;1;?\x1b\\", "4;1;"),
+        ("\x1b]4;2;?\x1b\\", "4;2;"),
+        ("\x1b]4;3;?\x1b\\", "4;3;"),
+        ("\x1b]4;4;?\x1b\\", "4;4;"),
+        ("\x1b]4;5;?\x1b\\", "4;5;"),
         ("\x1b]4;6;?\x1b\\", "4;6;"),
         ("\x1b]4;8;?\x1b\\", "4;8;"),
     ];
@@ -83,6 +88,17 @@ pub fn query_palette() -> Option<StyleColor> {
     let black = parse_reply(&text, "4;0;").unwrap_or_else(|| "#000000".into());
     let cyan = parse_reply(&text, "4;6;").unwrap_or_else(|| fg.clone());
     let bright_black = parse_reply(&text, "4;8;").unwrap_or_else(|| mix(&fg, &bg));
+    // Accents in Skema's order (red, yellow, green, cyan, blue, magenta) from ANSI 1, 3, 2, 6, 4, 5.
+    let fallback = skema_core::Accents::default();
+    let slot = |n: u8, default: &str| parse_reply(&text, &format!("4;{n};")).unwrap_or_else(|| default.to_string());
+    let accents = skema_core::Accents {
+        red: slot(1, &fallback.red),
+        yellow: slot(3, &fallback.yellow),
+        green: slot(2, &fallback.green),
+        cyan: cyan.clone(),
+        blue: slot(4, &fallback.blue),
+        magenta: slot(5, &fallback.magenta),
+    };
     Some(StyleColor {
         ink: black,
         panel: bg.clone(),
@@ -93,6 +109,7 @@ pub fn query_palette() -> Option<StyleColor> {
         dot: bright_black.clone(),
         line: fg,
         frame: bright_black,
+        accents,
     })
 }
 

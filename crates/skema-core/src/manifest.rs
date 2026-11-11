@@ -45,6 +45,9 @@ pub struct Node {
     pub size: NodeSize,
     #[serde(rename = "gridPosition")]
     pub grid_position: GridPosition,
+    /// Accent for the border and label. Absent means the theme's Node color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Accent>,
 }
 
 /// Directed connection between Nodes (wire field: edge).
@@ -66,6 +69,9 @@ pub struct Edge {
     /// Pulse animation. Absent means `none`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pulse: Option<Pulse>,
+    /// Accent for the line and arrowheads. Absent means the theme's edge color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Accent>,
 }
 
 impl Edge {
@@ -78,6 +84,7 @@ impl Edge {
             to_side: None,
             label_position: None,
             pulse: None,
+            color: None,
         }
     }
 
@@ -124,11 +131,51 @@ pub struct Separator {
     pub style: SeparatorStyle,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// Accent for the line and label. Absent means the theme's Separator color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Accent>,
 }
 
 impl Separator {
     pub fn is_horizontal(&self) -> bool {
         self.from.y == self.to.y
+    }
+}
+
+/// Named accent color for one Node, Edge, or Separator (wire field: color).
+/// A name, not a hex value: every theme supplies its own shade, so a colored
+/// element stays readable on light and dark themes alike.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Accent {
+    Red,
+    Yellow,
+    Green,
+    Cyan,
+    Blue,
+    Magenta,
+}
+
+impl Accent {
+    pub const ALL: [Accent; 6] = [Accent::Red, Accent::Yellow, Accent::Green, Accent::Cyan, Accent::Blue, Accent::Magenta];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Accent::Red => "red",
+            Accent::Yellow => "yellow",
+            Accent::Green => "green",
+            Accent::Cyan => "cyan",
+            Accent::Blue => "blue",
+            Accent::Magenta => "magenta",
+        }
+    }
+
+    /// Theme default → red → yellow → … → magenta → theme default.
+    pub fn cycle(current: Option<Accent>) -> Option<Accent> {
+        match current {
+            None => Some(Accent::ALL[0]),
+            Some(a) => Accent::ALL.iter().position(|x| *x == a).and_then(|i| Accent::ALL.get(i + 1)).copied(),
+        }
     }
 }
 

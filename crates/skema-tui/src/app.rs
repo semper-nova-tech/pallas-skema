@@ -8,7 +8,7 @@ use std::time::{Duration, Instant, SystemTime};
 use crate::clipboard;
 use skema_core::{
     format_text_failure, parse_manifest, render_manifest_with, serialize_manifest, validate_manifest,
-    CanvasSize, Edge, GridPosition, LabelPosition, LabelWarning, ManifestDocument, Node, NodeSize, NodeType, Pulse,
+    Accent, CanvasSize, Edge, GridPosition, LabelPosition, LabelWarning, ManifestDocument, Node, NodeSize, NodeType, Pulse,
     Separator, SeparatorStyle, TextFailure, MAX_FOOTPRINT, MIN_FOOTPRINT,
 };
 
@@ -46,17 +46,19 @@ pub enum NodeField {
     Label,
     Description,
     Size,
+    Color,
 }
 
 /// The Node type stays in the Manifest for agents but is hidden from the Editor.
 impl NodeField {
-    pub const ALL: [NodeField; 3] = [NodeField::Label, NodeField::Description, NodeField::Size];
+    pub const ALL: [NodeField; 4] = [NodeField::Label, NodeField::Description, NodeField::Size, NodeField::Color];
 
     pub fn name(self) -> &'static str {
         match self {
             NodeField::Label => "label",
             NodeField::Description => "desc",
             NodeField::Size => "size",
+            NodeField::Color => "color",
         }
     }
 
@@ -64,6 +66,11 @@ impl NodeField {
         let i = NodeField::ALL.iter().position(|f| *f == self).unwrap_or(0) as i64;
         NodeField::ALL[(i + delta).rem_euclid(NodeField::ALL.len() as i64) as usize]
     }
+}
+
+/// An element's color as the Editor shows it: the accent, or "theme" when it has none.
+pub fn color_name(color: Option<Accent>) -> &'static str {
+    color.map_or("theme", Accent::name)
 }
 
 /// A text field being typed into, with a cursor measured in characters.
@@ -351,7 +358,7 @@ enum PictureOutcome {
     Cancelled,
 }
 
-const KEYS_HINT: &str = "tab next  ←↑↓→ move  ⏎ edit  a add  c connect, then click  [ ] { } size  S separator  x delete  + - zoom  0 fit  C copy menu  y png  Y svg  g gif  m motion  s save  q quit";
+const KEYS_HINT: &str = "tab next  ←↑↓→ move  ⏎ edit  a add  c connect, then click  [ ] { } size  o color  S separator  x delete  + - zoom  0 fit  C copy menu  y png  Y svg  g gif  m motion  s save  q quit";
 
 impl App {
     pub fn open(manifest_path: &Path, svg_path: &Path) -> App {
@@ -405,18 +412,18 @@ impl App {
             Mode::EditEdge { editing: Some(_) } | Mode::EditNode { editing: Some(_), .. } => {
                 "type the value  ⏎ save field  esc cancel".into()
             }
-            Mode::EditEdge { editing: None } => "⏎ edit label  L label spot  p pulse  x delete  esc done".into(),
-            Mode::EditNode { editing: None, .. } => "↑↓ pick field  ⏎ edit (size cycles)  [ ] columns  { } rows  esc done".into(),
+            Mode::EditEdge { editing: None } => "⏎ edit label  L label spot  p pulse  o color  x delete  esc done".into(),
+            Mode::EditNode { editing: None, .. } => "↑↓ pick field  ⏎ edit (size, color cycle)  [ ] columns  { } rows  o color  esc done".into(),
             Mode::Connect { from, .. } => format!("connect from '{from}': click the target Node, or tab to it and c  ·  esc cancels"),
             Mode::AddSeparator { start: None } => "separator: click its first end point on the Grid  ·  esc cancels".into(),
             Mode::AddSeparator { start: Some(_) } => "separator: click its other end (straight across or down)  ·  esc cancels".into(),
             Mode::Normal if self.copy_menu.is_some() => "copy: ↑↓ pick  ⏎ copy  esc close  (y png  Y svg  g gif)".into(),
             Mode::Normal if self.manifest.is_none() => "r reload after fixing the file  q quit".into(),
             Mode::Normal if self.focus == Focus::Edges => {
-                "edge: tab next  ⇧tab prev  ⏎ edit  L label spot  p pulse  x delete  s save  q quit".into()
+                "edge: tab next  ⇧tab prev  ⏎ edit  L label spot  p pulse  o color  x delete  s save  q quit".into()
             }
             Mode::Normal if self.focus == Focus::Separators => {
-                "separator: tab next  ←↑↓→ move  t solid/dashed  x delete  s save  q quit".into()
+                "separator: tab next  ←↑↓→ move  t solid/dashed  o color  x delete  s save  q quit".into()
             }
             Mode::Normal if !self.autosave => KEYS_HINT.into(),
             Mode::Normal => KEYS_HINT.replace("s save  ", ""),
@@ -758,6 +765,7 @@ impl App {
             node_type: NodeType::Process,
             size: NodeSize::Medium,
             grid_position: GridPosition { x, y },
+            color: None,
         };
         let fits = |cell: (i64, i64)| {
             let mut candidate = doc.clone();
@@ -882,6 +890,29 @@ impl App {
         });
     }
 
+    /// Step the selected Node, Edge, or Separator through the accents and back
+    /// to the theme's own color.
+    pub fn cycle_color(&mut self) {
+        let (focus, node, edge, sep) = (self.focus, self.selected.clone(), self.selected_edge, self.selected_separator);
+        let mut name = String::new();
+        let applied = self.try_apply(|doc| {
+            let slot = match focus {
+                Focus::Nodes => {
+                    let id = node.ok_or("select a Node, Edge, or Separator to color it")?;
+                    &mut doc.nodes.iter_mut().find(|n| n.id == id).ok_or("no Node selected")?.color
+                }
+                Focus::Edges => &mut doc.edges.get_mut(edge).ok_or("no Edge selected")?.color,
+                Focus::Separators => &mut doc.separators.get_mut(sep).ok_or("no Separator selected")?.color,
+            };
+            *slot = Accent::cycle(*slot);
+            name = color_name(*slot).to_string();
+            Ok(())
+        });
+        if applied {
+            self.info(format!("color {name} · o cycles"));
+        }
+    }
+
     pub fn selected_edge_ref(&self) -> Option<&Edge> {
         self.manifest.as_ref()?.edges.get(self.selected_edge)
     }
@@ -928,6 +959,7 @@ impl App {
                 to: GridPosition { x: end.0, y: end.1 },
                 style: SeparatorStyle::Dashed,
                 label: None,
+                color: None,
             });
             Ok(())
         });
@@ -1151,6 +1183,7 @@ impl App {
             }
             Mode::EditNode { field, editing: None } => match field {
                 NodeField::Size => self.cycle_size(),
+                NodeField::Color => self.cycle_color(),
                 NodeField::Label | NodeField::Description => {
                     let Some(node) = self.selected_node() else { return };
                     let current = match field {
@@ -2287,6 +2320,26 @@ mod tests {
             seen.push(edge(&app).pulse);
         }
         assert_eq!(seen, vec![Some(Pulse::Forward), Some(Pulse::Both), None]);
+    }
+
+    #[test]
+    fn o_cycles_the_selected_elements_color_back_to_the_theme() {
+        let dir = temp_dir("colors");
+        let mut app = open_with(&dir, &two_nodes());
+        app.select_id("a");
+        let mut seen = vec![];
+        for _ in 0..7 {
+            app.cycle_color();
+            seen.push(app.manifest.as_ref().unwrap().nodes.iter().find(|n| n.id == "a").unwrap().color);
+        }
+        let mut want: Vec<Option<Accent>> = Accent::ALL.into_iter().map(Some).collect();
+        want.push(None);
+        assert_eq!(seen, want);
+        app.connect_ids("a", "b", None, None);
+        app.select_edge(0);
+        app.cycle_color();
+        assert_eq!(app.manifest.as_ref().unwrap().edges[0].color, Some(Accent::Red));
+        assert!(app.status.text.contains("color red"));
     }
 
     #[test]

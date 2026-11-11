@@ -145,7 +145,7 @@ pub fn resolve_theme(key: Option<&str>) -> Result<skema_core::DiagramStyle, Text
         Some(k) => skema_core::Theme::from_key(k)
             .map(skema_core::resolve_style)
             .ok_or_else(|| TextFailure {
-                message: format!("unknown theme '{k}': use phosphor, nord, or terminal"),
+                message: format!("unknown theme '{k}': use phosphor, nord, tokyo, mocha, contrast, latte, tokyo-day, or terminal"),
                 location: None,
             }),
     }

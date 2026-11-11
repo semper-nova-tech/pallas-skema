@@ -51,6 +51,56 @@ pub struct StyleColor {
     pub dot: String,
     pub line: String,
     pub frame: String,
+    /// Shades for the named accents a Manifest may put on one element.
+    #[serde(default)]
+    pub accents: Accents,
+}
+
+/// One shade per named accent (wire: color.accents).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Accents {
+    pub red: String,
+    pub yellow: String,
+    pub green: String,
+    pub cyan: String,
+    pub blue: String,
+    pub magenta: String,
+}
+
+impl Accents {
+    pub fn new([red, yellow, green, cyan, blue, magenta]: [&str; 6]) -> Accents {
+        Accents { red: red.into(), yellow: yellow.into(), green: green.into(), cyan: cyan.into(), blue: blue.into(), magenta: magenta.into() }
+    }
+
+    pub fn get(&self, accent: crate::manifest::Accent) -> &str {
+        use crate::manifest::Accent::*;
+        match accent {
+            Red => &self.red,
+            Yellow => &self.yellow,
+            Green => &self.green,
+            Cyan => &self.cyan,
+            Blue => &self.blue,
+            Magenta => &self.magenta,
+        }
+    }
+
+    pub fn all(&self) -> [&str; 6] {
+        crate::manifest::Accent::ALL.map(|a| self.get(a))
+    }
+}
+
+/// Bright shades that read on any dark canvas, for palettes cached before accents existed.
+impl Default for Accents {
+    fn default() -> Accents {
+        Accents::new(["#e06c75", "#e5c07b", "#98c379", "#56b6c2", "#61afef", "#c678dd"])
+    }
+}
+
+impl StyleColor {
+    /// The accent's shade, or `fallback` when the element has none.
+    pub fn accent_or<'a>(&'a self, accent: Option<crate::manifest::Accent>, fallback: &'a str) -> &'a str {
+        accent.map_or(fallback, |a| self.accents.get(a))
+    }
 }
 
 const STYLE_JSON: &str = include_str!("../../../style/skema-style.json");

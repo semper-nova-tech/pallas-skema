@@ -3,8 +3,7 @@
 //! others are outlined. Every Node type shares one color.
 
 use ratatui::style::Color;
-use skema_core::style::{diagram_style, DiagramStyle};
-use skema_core::{LabelPosition, ManifestDocument, Node, NodeSize, NodeType, Pulse, Separator, SeparatorStyle};
+use skema_core::{Accent, LabelPosition, ManifestDocument, Node, NodeSize, NodeType, Pulse, Separator, SeparatorStyle};
 
 use crate::geometry::{clamp_route, facing_port, port_on, ranked_ports, route, Port, Rect, Side, Zoom};
 
@@ -34,6 +33,15 @@ pub struct Palette {
     pub line: Color,
     pub frame: Color,
     pub panel: Color,
+    /// One color per named accent, in `Accent::ALL` order.
+    pub accents: [Color; 6],
+}
+
+impl Palette {
+    /// The accent's color, or `fallback` when the element has none.
+    pub fn accent_or(&self, accent: Option<Accent>, fallback: Color) -> Color {
+        accent.and_then(|a| Accent::ALL.iter().position(|x| *x == a)).map_or(fallback, |i| self.accents[i])
+    }
 }
 
 pub use skema_core::Theme;
@@ -45,9 +53,8 @@ pub fn palette() -> Palette {
 
 pub fn palette_for(theme: Theme) -> Palette {
     match theme {
-        Theme::Phosphor => {
-            let s: &DiagramStyle = diagram_style();
-            let c = &s.color;
+        Theme::Phosphor | Theme::Nord | Theme::Tokyo | Theme::Mocha | Theme::Contrast | Theme::Latte | Theme::TokyoDay => {
+            let c = skema_core::theme::colors(theme).expect("named themes have fixed colors");
             Palette {
                 canvas: hex(&c.canvas),
                 node_fill: hex(&c.node_fill),
@@ -58,20 +65,7 @@ pub fn palette_for(theme: Theme) -> Palette {
                 line: hex(&c.line),
                 frame: hex(&c.frame),
                 panel: hex(&c.panel),
-            }
-        }
-        Theme::Nord => {
-            let c = skema_core::theme::nord_colors();
-            Palette {
-                canvas: hex(&c.canvas),
-                node_fill: hex(&c.node_fill),
-                ink: hex(&c.ink),
-                phosphor: hex(&c.phosphor),
-                phosphor_dim: hex(&c.phosphor_dim),
-                dot: hex(&c.dot),
-                line: hex(&c.line),
-                frame: hex(&c.frame),
-                panel: hex(&c.panel),
+                accents: c.accents.all().map(hex),
             }
         }
         // ANSI slots only, so the terminal's theme supplies every color.
@@ -85,6 +79,7 @@ pub fn palette_for(theme: Theme) -> Palette {
             line: Color::Reset,
             frame: Color::DarkGray,
             panel: Color::Reset,
+            accents: [Color::Red, Color::Yellow, Color::Green, Color::Cyan, Color::Blue, Color::Magenta],
         },
     }
 }
@@ -251,7 +246,7 @@ pub fn draw_view(doc: &ManifestDocument, zoom: &Zoom, view: &View) -> Surface {
     // Plain Edges first, then the highlighted ones on top.
     let mut order: Vec<usize> = (0..doc.edges.len()).collect();
     order.sort_by_key(|i| Some(*i) == hover_edge || Some(*i) == selected_edge);
-    let edge_color = |i: usize| if Some(i) == selected_edge { pal.phosphor } else { pal.line };
+    let edge_color = |i: usize| pal.accent_or(doc.edges[i].color, if Some(i) == selected_edge { pal.phosphor } else { pal.line });
     for &i in &order {
         let Some(pts) = &paths[i] else { continue };
         let heavy = Some(i) == hover_edge || Some(i) == selected_edge;
@@ -669,7 +664,7 @@ pub fn separator_glyph(horizontal: bool, style: SeparatorStyle, selected: bool) 
 /// A Separator in the dim color (bright when selected), its label on the line at its start.
 fn draw_separator(s: &mut Surface, zoom: &Zoom, sep: &Separator, selected: bool, pal: &Palette) {
     let ch = separator_glyph(sep.is_horizontal(), sep.style, selected);
-    let color = if selected { pal.phosphor } else { pal.phosphor_dim };
+    let color = pal.accent_or(sep.color, if selected { pal.phosphor } else { pal.phosphor_dim });
     for (c, r) in separator_cells(zoom, sep) {
         s.put_fg(c, r, ch, color);
     }
@@ -702,10 +697,11 @@ fn heavy_corner(c: char) -> char {
 fn draw_node(s: &mut Surface, zoom: &Zoom, node: &Node, selected: bool, hovered: bool, source: bool, pal: &Palette) {
     let r: Rect = zoom.node_rect(node);
     // Filled when selected: phosphor box with ink text. Outline otherwise, heavy when hovered.
+    let accent = pal.accent_or(node.color, pal.phosphor);
     let (bg, border, label_fg, meta_fg) = if selected {
-        (pal.phosphor, pal.phosphor, pal.ink, pal.ink)
+        (accent, accent, pal.ink, pal.ink)
     } else {
-        (pal.node_fill, pal.phosphor, pal.phosphor, pal.phosphor_dim)
+        (pal.node_fill, accent, accent, pal.phosphor_dim)
     };
     let rounded = node.node_type == NodeType::Decision;
     let heavy = hovered && !selected;
@@ -1117,7 +1113,6 @@ mod tests {
         assert_ne!(palette_for(Theme::Nord).canvas, palette_for(Theme::Phosphor).canvas);
         assert_eq!(palette_for(Theme::Terminal).canvas, Color::Reset);
         assert_eq!(Theme::from_key("nord"), Some(Theme::Nord));
-        assert_eq!(Theme::Phosphor.next().next().next(), Theme::Phosphor);
     }
 
     #[test]

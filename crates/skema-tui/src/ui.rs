@@ -395,6 +395,7 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
                         let (c, r) = node.size.footprint();
                         format!("{c}×{r} ⟳  [ ] {{ }}")
                     }
+                    NodeField::Color => format!("{} ⟳ o", crate::app::color_name(node.color)),
                 };
                 let style = if picked { bright } else { dim };
                 let (text, text_style) = match (picked, editing) {
@@ -478,6 +479,7 @@ fn draw_panel(frame: &mut Frame, area: Rect, app: &App, pal: &Palette) -> PanelH
                         dim,
                     )),
                     Line::from(Span::styled(fit(&format!(" style {style} ⟳ t"), inner_w), dim)),
+                    Line::from(Span::styled(fit(&format!(" color {} ⟳ o", crate::app::color_name(sep.color)), inner_w), dim)),
                     Line::from(Span::styled(fit(&format!(" label {}", sep.label.as_deref().unwrap_or("(none)")), inner_w), dim)),
                 ];
                 let block_area = Rect { x: area.x, y, width: area.width, height: (body.len() as u16 + 2).min(room) };
@@ -528,6 +530,7 @@ fn edge_option_lines(edge: &skema_core::Edge, style: Style) -> Vec<Line<'static>
     vec![
         Line::from(Span::styled(format!(" pos   {} ⟳ L", label_position_name(edge.label_placement())), style)),
         Line::from(Span::styled(format!(" pulse {} ⟳ p", pulse_name(edge.pulse_mode())), style)),
+        Line::from(Span::styled(format!(" color {} ⟳ o", crate::app::color_name(edge.color)), style)),
     ]
 }
 

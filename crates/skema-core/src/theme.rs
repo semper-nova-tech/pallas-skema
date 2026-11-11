@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::style::{diagram_style, styled, DiagramStyle, StyleColor};
+use crate::style::{diagram_style, styled, Accents, DiagramStyle, StyleColor};
 
 /// Match terminal is the default: the picture takes the terminal's own ANSI
 /// colors, and falls back to Phosphor wherever they cannot be read.
@@ -16,17 +16,36 @@ use crate::style::{diagram_style, styled, DiagramStyle, StyleColor};
 pub enum Theme {
     Phosphor,
     Nord,
+    Tokyo,
+    Mocha,
+    Contrast,
+    Latte,
+    TokyoDay,
     #[default]
     Terminal,
 }
 
 impl Theme {
-    pub const ALL: [Theme; 3] = [Theme::Phosphor, Theme::Nord, Theme::Terminal];
+    pub const ALL: [Theme; 8] = [
+        Theme::Phosphor,
+        Theme::Nord,
+        Theme::Tokyo,
+        Theme::Mocha,
+        Theme::Contrast,
+        Theme::Latte,
+        Theme::TokyoDay,
+        Theme::Terminal,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             Theme::Phosphor => "Phosphor",
             Theme::Nord => "Nord",
+            Theme::Tokyo => "Tokyo Night",
+            Theme::Mocha => "Mocha",
+            Theme::Contrast => "High contrast",
+            Theme::Latte => "Latte",
+            Theme::TokyoDay => "Tokyo Day",
             Theme::Terminal => "Match terminal",
         }
     }
@@ -35,6 +54,11 @@ impl Theme {
         match self {
             Theme::Phosphor => "phosphor",
             Theme::Nord => "nord",
+            Theme::Tokyo => "tokyo",
+            Theme::Mocha => "mocha",
+            Theme::Contrast => "contrast",
+            Theme::Latte => "latte",
+            Theme::TokyoDay => "tokyo-day",
             Theme::Terminal => "terminal",
         }
     }
@@ -49,19 +73,69 @@ impl Theme {
     }
 }
 
+/// `[ink, panel, node_fill, phosphor, phosphor_dim, dot, line, frame]`, then the six
+/// accents. Ink doubles as the canvas and as text on a filled (selected) Node.
+fn palette([ink, panel, node_fill, phosphor, phosphor_dim, dot, line, frame]: [&str; 8], accents: [&str; 6]) -> StyleColor {
+    StyleColor {
+        ink: ink.into(),
+        panel: panel.into(),
+        canvas: ink.into(),
+        node_fill: node_fill.into(),
+        phosphor: phosphor.into(),
+        phosphor_dim: phosphor_dim.into(),
+        dot: dot.into(),
+        line: line.into(),
+        frame: frame.into(),
+        accents: Accents::new(accents),
+    }
+}
+
 /// Nord, as Ghostty ships it: polar night backgrounds, frost accents, snow storm text.
 pub fn nord_colors() -> StyleColor {
-    StyleColor {
-        ink: "#2e3440".into(),
-        panel: "#3b4252".into(),
-        canvas: "#2e3440".into(),
-        node_fill: "#3b4252".into(),
-        phosphor: "#88c0d0".into(),
-        phosphor_dim: "#81a1c1".into(),
-        dot: "#4c566a".into(),
-        line: "#8fbcbb".into(),
-        frame: "#4c566a".into(),
-    }
+    palette(
+        ["#2e3440", "#3b4252", "#3b4252", "#88c0d0", "#81a1c1", "#4c566a", "#8fbcbb", "#4c566a"],
+        ["#bf616a", "#ebcb8b", "#a3be8c", "#8fbcbb", "#81a1c1", "#b48ead"],
+    )
+}
+
+/// Tokyo Night: blue Nodes, magenta edges, so the two never blur together.
+pub fn tokyo_colors() -> StyleColor {
+    palette(
+        ["#1a1b26", "#16161e", "#24283b", "#7aa2f7", "#a9b1d6", "#3b4261", "#bb9af7", "#414868"],
+        ["#f7768e", "#e0af68", "#9ece6a", "#7dcfff", "#7aa2f7", "#bb9af7"],
+    )
+}
+
+/// Catppuccin Mocha: mauve Nodes, peach edges.
+pub fn mocha_colors() -> StyleColor {
+    palette(
+        ["#1e1e2e", "#181825", "#313244", "#cba6f7", "#bac2de", "#45475a", "#fab387", "#6c7086"],
+        ["#f38ba8", "#f9e2af", "#a6e3a1", "#89dceb", "#89b4fa", "#f5c2e7"],
+    )
+}
+
+/// High contrast: white Nodes on black, yellow edges.
+pub fn contrast_colors() -> StyleColor {
+    palette(
+        ["#000000", "#0d0d0d", "#141414", "#ffffff", "#e0e0e0", "#3a3a3a", "#ffd700", "#9a9a9a"],
+        ["#ff5555", "#ffd700", "#50fa7b", "#00e5ff", "#6cb6ff", "#ff79c6"],
+    )
+}
+
+/// Catppuccin Latte, light: mauve Nodes, orange edges on a pale canvas.
+pub fn latte_colors() -> StyleColor {
+    palette(
+        ["#eff1f5", "#e6e9ef", "#e6e9ef", "#8839ef", "#5c5f77", "#bcc0cc", "#fe640b", "#9ca0b0"],
+        ["#d20f39", "#df8e1d", "#40a02b", "#04a5e5", "#1e66f5", "#ea76cb"],
+    )
+}
+
+/// Tokyo Night Day, light: blue Nodes, violet edges.
+pub fn tokyo_day_colors() -> StyleColor {
+    palette(
+        ["#e1e2e7", "#d0d5e3", "#e9e9ed", "#2e7de9", "#6172b0", "#c4c8da", "#9854f1", "#a1a6c5"],
+        ["#f52a65", "#8c6c3e", "#587539", "#007197", "#2e7de9", "#9854f1"],
+    )
 }
 
 /// Colors for a theme. Match terminal needs the palette the Editor read from the
@@ -70,6 +144,11 @@ pub fn colors(theme: Theme) -> Option<StyleColor> {
     match theme {
         Theme::Phosphor => Some(diagram_style().color.clone()),
         Theme::Nord => Some(nord_colors()),
+        Theme::Tokyo => Some(tokyo_colors()),
+        Theme::Mocha => Some(mocha_colors()),
+        Theme::Contrast => Some(contrast_colors()),
+        Theme::Latte => Some(latte_colors()),
+        Theme::TokyoDay => Some(tokyo_day_colors()),
         Theme::Terminal => load_terminal_palette(),
     }
 }
@@ -130,7 +209,24 @@ mod tests {
         for t in Theme::ALL {
             assert_eq!(Theme::from_key(t.key()), Some(t));
         }
-        assert_eq!(Theme::Phosphor.next().next().next(), Theme::Phosphor);
+        let mut t = Theme::Phosphor;
+        for _ in Theme::ALL {
+            t = t.next();
+        }
+        assert_eq!(t, Theme::Phosphor);
+    }
+
+    #[test]
+    fn named_themes_keep_edges_apart_from_nodes() {
+        for t in Theme::ALL.into_iter().filter(|t| *t != Theme::Terminal) {
+            let c = colors(t).unwrap();
+            assert_ne!(c.line, c.phosphor, "{}: edges and Nodes share a color", t.name());
+            let accents = c.accents.all();
+            for a in accents {
+                assert_ne!(a, c.canvas, "{}: an accent vanishes into the canvas", t.name());
+            }
+            assert!(accents.iter().enumerate().all(|(i, a)| !accents[..i].contains(a)), "{}: accents repeat", t.name());
+        }
     }
 
     #[test]
