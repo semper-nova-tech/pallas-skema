@@ -1,0 +1,23 @@
+{
+  "canvas": { "columns": 17, "rows": 17 },
+  "nodes": [
+    { "id": "clicks", "label": "Clickstream", "type": "process", "size": "medium", "gridPosition": { "x": 1, "y": 1 } },
+    { "id": "orders", "label": "Orders service", "type": "process", "size": "medium", "gridPosition": { "x": 5, "y": 1 } },
+    { "id": "payments", "label": "Payments", "type": "process", "size": "medium", "gridPosition": { "x": 9, "y": 1 } },
+    { "id": "returns", "label": "Returns", "type": "process", "size": "medium", "gridPosition": { "x": 13, "y": 1 } },
+    { "id": "topic", "label": "events", "description": "Kafka topic", "type": "process", "size": { "columns": 2, "rows": 2 }, "gridPosition": { "x": 7, "y": 6 } },
+    { "id": "flink", "label": "Flink job", "description": "join and enrich", "type": "process", "size": "medium", "gridPosition": { "x": 7, "y": 10 } },
+    { "id": "warehouse", "label": "Data warehouse", "type": "process", "size": { "columns": 2, "rows": 2 }, "gridPosition": { "x": 7, "y": 13 } }
+  ],
+  "edges": [
+    { "from": "clicks", "to": "topic", "fromSide": "bottom", "toSide": "top" },
+    { "from": "orders", "to": "topic", "fromSide": "bottom", "toSide": "top" },
+    { "from": "payments", "to": "topic", "fromSide": "bottom", "toSide": "top" },
+    { "from": "returns", "to": "topic", "fromSide": "bottom", "toSide": "top" },
+    { "from": "topic", "to": "flink" },
+    { "from": "flink", "to": "warehouse", "pulse": "forward" }
+  ],
+  "separators": [
+    { "id": "kafka", "from": { "x": 0, "y": 5 }, "to": { "x": 16, "y": 5 }, "style": "dashed", "label": "Kafka cluster" }
+  ]
+}

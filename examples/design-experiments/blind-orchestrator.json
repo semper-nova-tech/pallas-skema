@@ -1,0 +1,28 @@
+{
+  "canvas": { "columns": 25, "rows": 16 },
+  "nodes": [
+    { "id": "request", "label": "User request", "type": "process", "size": "medium", "gridPosition": { "x": 11, "y": 1 } },
+    { "id": "orchestrator", "label": "Orchestrator", "description": "Fans out agents", "type": "process", "size": "medium", "gridPosition": { "x": 11, "y": 4 } },
+    { "id": "discovery", "label": "Discovery", "description": "Map repo", "type": "process", "size": "medium", "gridPosition": { "x": 1, "y": 7 } },
+    { "id": "planner", "label": "Planner", "description": "Write plan", "type": "process", "size": "medium", "gridPosition": { "x": 6, "y": 7 } },
+    { "id": "builder", "label": "Builder", "description": "Make change", "type": "process", "size": "medium", "gridPosition": { "x": 11, "y": 7 } },
+    { "id": "reviewer", "label": "Reviewer", "description": "Check diff", "type": "process", "size": "medium", "gridPosition": { "x": 16, "y": 7 } },
+    { "id": "reporter", "label": "Reporter", "description": "Summarize", "type": "process", "size": "medium", "gridPosition": { "x": 21, "y": 7 } },
+    { "id": "synthesizer", "label": "Synthesizer", "description": "Merges results", "type": "process", "size": "medium", "gridPosition": { "x": 11, "y": 10 } },
+    { "id": "answer", "label": "Answer", "description": "To the user", "type": "process", "size": "medium", "gridPosition": { "x": 11, "y": 13 } }
+  ],
+  "edges": [
+    { "from": "request", "to": "orchestrator", "pulse": "forward" },
+    { "from": "orchestrator", "to": "discovery", "fromSide": "bottom", "toSide": "top" },
+    { "from": "orchestrator", "to": "planner", "fromSide": "bottom", "toSide": "top" },
+    { "from": "orchestrator", "to": "builder", "fromSide": "bottom", "toSide": "top", "pulse": "forward" },
+    { "from": "orchestrator", "to": "reviewer", "fromSide": "bottom", "toSide": "top" },
+    { "from": "orchestrator", "to": "reporter", "fromSide": "bottom", "toSide": "top" },
+    { "from": "discovery", "to": "synthesizer", "fromSide": "bottom", "toSide": "top" },
+    { "from": "planner", "to": "synthesizer", "fromSide": "bottom", "toSide": "top" },
+    { "from": "builder", "to": "synthesizer", "fromSide": "bottom", "toSide": "top", "pulse": "forward" },
+    { "from": "reviewer", "to": "synthesizer", "fromSide": "bottom", "toSide": "top" },
+    { "from": "reporter", "to": "synthesizer", "fromSide": "bottom", "toSide": "top" },
+    { "from": "synthesizer", "to": "answer", "pulse": "forward" }
+  ]
+}

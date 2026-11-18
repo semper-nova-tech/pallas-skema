@@ -1,0 +1,37 @@
+{
+  "canvas": { "columns": 30, "rows": 16 },
+  "nodes": [
+    { "id": "user", "label": "User", "description": "request", "type": "process",
+      "size": { "columns": 1, "rows": 1 }, "gridPosition": { "x": 14, "y": 1 } },
+    { "id": "orch", "label": "Orchestrator", "description": "fans out sub-agents", "type": "process",
+      "size": "large", "gridPosition": { "x": 13, "y": 4 } },
+    { "id": "discover", "label": "Discovery", "type": "process",
+      "size": "large", "gridPosition": { "x": 1, "y": 7 } },
+    { "id": "plan", "label": "Planner", "type": "process",
+      "size": "large", "gridPosition": { "x": 7, "y": 7 } },
+    { "id": "build", "label": "Builder", "type": "process",
+      "size": "large", "gridPosition": { "x": 13, "y": 7 } },
+    { "id": "review", "label": "Reviewer", "type": "process",
+      "size": "large", "gridPosition": { "x": 19, "y": 7 } },
+    { "id": "report", "label": "Reporter", "type": "process",
+      "size": "large", "gridPosition": { "x": 25, "y": 7 } },
+    { "id": "synth", "label": "Synthesizer", "description": "merge results", "type": "process",
+      "size": "large", "gridPosition": { "x": 13, "y": 10 } },
+    { "id": "answer", "label": "Answer", "type": "process",
+      "size": { "columns": 1, "rows": 1 }, "gridPosition": { "x": 14, "y": 13 } }
+  ],
+  "edges": [
+    { "from": "user", "to": "orch" },
+    { "from": "orch", "to": "discover", "label": "map repo", "fromSide": "bottom", "toSide": "top" },
+    { "from": "orch", "to": "plan", "label": "write plan", "fromSide": "bottom", "toSide": "top" },
+    { "from": "orch", "to": "build", "label": "make change", "fromSide": "bottom", "toSide": "top", "pulse": "forward" },
+    { "from": "orch", "to": "review", "label": "check diff", "fromSide": "bottom", "toSide": "top" },
+    { "from": "orch", "to": "report", "label": "summarize", "fromSide": "bottom", "toSide": "top" },
+    { "from": "discover", "to": "synth", "fromSide": "bottom", "toSide": "top" },
+    { "from": "plan", "to": "synth", "fromSide": "bottom", "toSide": "top" },
+    { "from": "build", "to": "synth", "fromSide": "bottom", "toSide": "top", "pulse": "forward" },
+    { "from": "review", "to": "synth", "fromSide": "bottom", "toSide": "top" },
+    { "from": "report", "to": "synth", "fromSide": "bottom", "toSide": "top" },
+    { "from": "synth", "to": "answer" }
+  ]
+}

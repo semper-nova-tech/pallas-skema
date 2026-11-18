@@ -1,0 +1,20 @@
+{
+  "canvas": { "columns": 17, "rows": 12 },
+  "nodes": [
+    { "id": "web", "label": "Web app", "type": "process", "size": "medium", "gridPosition": { "x": 2, "y": 2 } },
+    { "id": "mobile", "label": "Mobile app", "type": "process", "size": "medium", "gridPosition": { "x": 2, "y": 5 } },
+    { "id": "batch", "label": "Batch import", "type": "process", "size": "medium", "gridPosition": { "x": 2, "y": 8 } },
+    { "id": "orders", "label": "orders", "description": "Kafka topic", "type": "process", "size": { "columns": 2, "rows": 3 }, "gridPosition": { "x": 7, "y": 4 } },
+    { "id": "fraud", "label": "Fraud check", "type": "process", "size": "medium", "gridPosition": { "x": 12, "y": 2 } },
+    { "id": "fulfil", "label": "Fulfilment", "type": "process", "size": "medium", "gridPosition": { "x": 12, "y": 5 } },
+    { "id": "analytics", "label": "Analytics", "type": "process", "size": "medium", "gridPosition": { "x": 12, "y": 8 } }
+  ],
+  "edges": [
+    { "from": "web", "to": "orders", "fromSide": "right", "toSide": "left" },
+    { "from": "mobile", "to": "orders", "fromSide": "right", "toSide": "left" },
+    { "from": "batch", "to": "orders", "fromSide": "right", "toSide": "left" },
+    { "from": "orders", "to": "fraud", "fromSide": "right", "toSide": "left", "pulse": "forward" },
+    { "from": "orders", "to": "fulfil", "fromSide": "right", "toSide": "left", "pulse": "forward" },
+    { "from": "orders", "to": "analytics", "fromSide": "right", "toSide": "left", "pulse": "forward" }
+  ]
+}

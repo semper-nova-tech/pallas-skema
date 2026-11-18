@@ -1,0 +1,118 @@
+{
+  "canvas": {
+    "columns": 33,
+    "rows": 4
+  },
+  "nodes": [
+    {
+      "id": "checkout",
+      "label": "Checkout",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 1,
+        "y": 1
+      }
+    },
+    {
+      "id": "install",
+      "label": "Install",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 5,
+        "y": 1
+      }
+    },
+    {
+      "id": "lint",
+      "label": "Lint",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 9,
+        "y": 1
+      }
+    },
+    {
+      "id": "unit-tests",
+      "label": "Unit tests",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 13,
+        "y": 1
+      }
+    },
+    {
+      "id": "build-image",
+      "label": "Build image",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 17,
+        "y": 1
+      }
+    },
+    {
+      "id": "push-image",
+      "label": "Push image",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 21,
+        "y": 1
+      }
+    },
+    {
+      "id": "deploy-staging",
+      "label": "Deploy staging",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 25,
+        "y": 1
+      }
+    },
+    {
+      "id": "smoke-test",
+      "label": "Smoke test",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 29,
+        "y": 1
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "checkout",
+      "to": "install"
+    },
+    {
+      "from": "install",
+      "to": "lint"
+    },
+    {
+      "from": "lint",
+      "to": "unit-tests"
+    },
+    {
+      "from": "unit-tests",
+      "to": "build-image"
+    },
+    {
+      "from": "build-image",
+      "to": "push-image"
+    },
+    {
+      "from": "push-image",
+      "to": "deploy-staging"
+    },
+    {
+      "from": "deploy-staging",
+      "to": "smoke-test"
+    }
+  ]
+}

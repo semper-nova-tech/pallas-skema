@@ -1,0 +1,19 @@
+{
+  "canvas": { "columns": 24, "rows": 9 },
+  "nodes": [
+    { "id": "pick", "label": "Pick tool", "type": "process", "size": "medium", "gridPosition": { "x": 8, "y": 2 } },
+    { "id": "call", "label": "Call tool", "type": "process", "size": "medium", "gridPosition": { "x": 13, "y": 2 } },
+    { "id": "observe", "label": "Observe", "type": "process", "size": "medium", "gridPosition": { "x": 18, "y": 2 } },
+    { "id": "msg", "label": "Message", "type": "process", "size": "medium", "gridPosition": { "x": 3, "y": 5 } },
+    { "id": "decide", "label": "Decide", "type": "decision", "size": "medium", "gridPosition": { "x": 8, "y": 5 } },
+    { "id": "respond", "label": "Respond", "type": "process", "size": "medium", "gridPosition": { "x": 13, "y": 5 } }
+  ],
+  "edges": [
+    { "from": "msg", "to": "decide" },
+    { "from": "decide", "to": "respond", "label": "skip" },
+    { "from": "decide", "to": "pick", "label": "loop", "fromSide": "top", "toSide": "bottom" },
+    { "from": "pick", "to": "call" },
+    { "from": "call", "to": "observe" },
+    { "from": "observe", "to": "decide", "label": "again", "fromSide": "bottom", "toSide": "bottom", "pulse": "forward" }
+  ]
+}
