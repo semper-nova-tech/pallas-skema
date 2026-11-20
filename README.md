@@ -132,7 +132,7 @@ manifests, and the "needs `skema` X or newer" line in
 push a matching tag:
 
 ```bash
-git tag v0.3.1 && git push origin v0.3.1
+git tag v0.3.2 && git push origin v0.3.2
 ```
 
 Tag right after the version bump merges to `master`. The skill and plugin

@@ -1,0 +1,19 @@
+{
+  "canvas": { "columns": 10, "rows": 16 },
+  "nodes": [
+    { "id": "msg", "label": "User message", "type": "process", "size": "medium", "gridPosition": { "x": 1, "y": 2 } },
+    { "id": "decide", "label": "Decide", "description": "need tools?", "type": "decision", "size": "medium", "gridPosition": { "x": 1, "y": 5 } },
+    { "id": "respond", "label": "Respond", "type": "process", "size": "medium", "gridPosition": { "x": 1, "y": 8 } },
+    { "id": "pick", "label": "Pick tool", "type": "process", "size": "medium", "gridPosition": { "x": 6, "y": 5 } },
+    { "id": "call", "label": "Call tool", "type": "process", "size": "medium", "gridPosition": { "x": 6, "y": 8 } },
+    { "id": "observe", "label": "Observe result", "type": "process", "size": "medium", "gridPosition": { "x": 6, "y": 11 } }
+  ],
+  "edges": [
+    { "from": "msg", "to": "decide" },
+    { "from": "decide", "to": "respond", "label": "skip" },
+    { "from": "decide", "to": "pick", "label": "loop" },
+    { "from": "pick", "to": "call" },
+    { "from": "call", "to": "observe" },
+    { "from": "observe", "to": "decide", "label": "again", "fromSide": "left", "toSide": "left", "labelPosition": "start", "pulse": "forward" }
+  ]
+}

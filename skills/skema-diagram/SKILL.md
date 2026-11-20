@@ -22,7 +22,7 @@ which redraws when the file changes.
 command -v skema || ls ~/.local/bin/skema || ls target/release/skema
 ```
 
-Use the first one found. This skill needs `skema` 0.3.1 or newer; check with
+Use the first one found. This skill needs `skema` 0.3.2 or newer; check with
 `skema --version`. A binary that rejects `--version` is older than that.
 
 If none exists, or it is older, tell the user and offer the one-line install,
@@ -103,63 +103,142 @@ Rules the validator enforces. Design to them instead of discovering them by fail
 Validation only proves a Diagram is legal. These rules make it readable; follow
 them when you place Nodes or add Edges.
 
-- **One layer or stage per row.** Put the parts of one tier (callers and core,
-  the orchestration flow, the workers) on one row, top to bottom in the order
-  things happen. Flows that run in steps read left to right inside their row.
-- **Center by default.** Unless the person placed Nodes themselves, center the
-  Diagram on both axes: equal empty columns left and right, equal empty rows
-  top and bottom, within one cell. Take the footprint bounding box
-  (min x to max x + columns, min y to max y + rows) and shift every Node and
-  Separator by `(canvas columns − 1 − used width) / 2 − min x` (rows the same
-  way). For a symmetric fan-out, put the hub on the center column. Render
-  reports `off-center` when a fixed canvas is lopsided; treat it as a defect.
-- **Footprint by meaning.** 2×1 for a service or step; 2×2 for a data store or
-  queue; 3×1 for a gateway or wide hub; 1×1 for a small marker or an external
-  actor with a label of five characters or fewer; 3×2 or 3×3 for a Node with a
-  long description. Keep one footprint per row unless meaning needs another.
+### Shape first
+
+Before placing anything, name the shape the data has. Count the fan at each
+Node (one in and many out, many in and one out, one talking to many, a branch
+with unequal halves) and pick the matching symmetry. Then place Nodes to make
+that symmetry exact. A Diagram placed step by step, wrapping rows when it runs
+out of room, reads as a snake; a Diagram whose shape was chosen first reads
+at a glance.
+
+| Data | Shape | How to place it |
+|---|---|---|
+| One source, many targets (fan-out, broadcast, dispatch) | **Triangle**: apex on top, children on one row below | Apex on the axis column; children mirrored in pairs at equal distance from it; every fan Edge `bottom` → `top` so they share one trunk |
+| Many sources, one target (fan-in, aggregation, collection) | **Inverted triangle**: sources on top, apex below | Mirror of the above; fan Edges `bottom` → `top` into one trunk |
+| One to many and back to one (scatter-gather, map-reduce, orchestrator with a synthesizer) | **Diamond**: triangle over inverted triangle | One axis column; the middle child sits on it; both trunks on the axis |
+| One Node that every other talks to, often two-way (broker, coordinator, registry) | **Hub**: center Node, spokes on four sides | Hub on the canvas center; left and right spokes on its center row, top and bottom spokes on its center column, all at one gap; a fifth or sixth spoke on a diagonal joining the nearest trunk for its last cell |
+| Stages in time where one stage fans (pipeline, producers → topic → consumers) | **Horizontal triangle or diamond**: apex on the left, children in a column | The row axis; the apex and any collector on the center row; children mirrored above and below; fan Edges `right` → `left` |
+| A decision with one cheap branch and one expensive branch or loop | **Bi-modal asymmetry** | Main line straight (in, decide, respond); the cheap branch is one short Edge on the main line; the whole expensive branch sits on one side, in its own column or band; the other side stays empty so the weight is visibly unequal |
+| A decision with two branches of equal weight that rejoin | **Diamond**, two children | As the diamond; do not use it for unequal branches, it hides the difference |
+| A plain chain of steps | **One straight line** | One row (left to right) or one column (top to bottom). Never wrap a chain into a snake. If neither a row nor a column fits, split at a stage boundary into two rows that both read left to right, one above the other, joined by one Edge from the last Node of the first row (`bottom`) to the first Node of the second (`top`) through the band between them: a Z, not an S |
+
+Pick the axis direction by what the reader follows: time or stage order reads
+left to right, so pipelines are horizontal; hierarchy or tiers read top to
+bottom (callers above, workers below), so fan-outs and architectures are
+vertical. A shape may rotate (the triangle becomes horizontal) but not skew:
+mirrored Nodes share a row or column and an equal distance from the axis, and
+mirrored Edges take the same route.
+
+### Make the symmetry exact
+
+- **Fix the axis parity before footprints.** Two Nodes joined by one direct
+  Edge along an axis must agree in parity across that axis: same column
+  parity (both odd widths or both even) on a vertical axis, same row parity
+  on a horizontal one, or the Edge jogs half a cell. Decide the spine's
+  parity from its largest Node, then size the rest of the spine to match: a
+  2×2 store on a 3-wide spine becomes 3×2, a 2×1 step under a 3×1 hub becomes
+  3×1 or 1×1. Meaning footprints (below) yield to parity on the spine.
+  Across a trunk, parity binds only between the apex and a sibling that sits
+  on the axis (an odd number of siblings puts one there): those two must
+  agree, or the axis line jogs where the trunk meets the apex. So a store
+  facing an odd column of 2×1 siblings is 2×3 or 2×1, not 2×2; a 2×2 apex
+  suits an even number of siblings, where no sibling is on the axis. Never
+  inflate one sibling to match the apex; mirrored siblings always share one
+  footprint.
+- **Footprint by meaning, within parity.** 2×1 for a service or step; 2×2 for
+  a data store or queue; 3×1 for a gateway or wide hub; 1×1 for a small
+  marker or an external actor with a label of five characters or fewer; 3×2
+  or 3×3 for a hub or a Node with a long description. Keep one footprint per
+  row unless meaning needs another.
+- **Step siblings so their center lands on the axis.** `k` siblings of width
+  `w` stepped by `s` have their center at `x0 + ((k − 1)·s + w) / 2`. Choose
+  `s` so that equals the spine's center: a 3-wide spine wants an odd total
+  width, so four 2-wide siblings step by 4 (not 5) and two 3-wide siblings
+  step by 7 (not 6). The step is `columns + 3` by default and may move by one
+  either way to hit the axis; stacked rows step by `rows + 2` or more. Uneven
+  steps make jogged lines; an off-axis center makes a lopsided figure.
+- **Center the figure, and pick a canvas that can.** Unless the person placed
+  Nodes themselves, center the Diagram on both axes: take the footprint
+  bounding box (min x to max x + columns, min y to max y + rows) and shift
+  every Node and Separator by `(canvas columns − 1 − used width) / 2 − min x`
+  (rows the same way). That division must come out whole, so a figure of even
+  width needs an odd column count and an odd width an even one; 24×15 cannot
+  center a 3-wide hub, 24×14 can. Size the canvas to the figure plus one or
+  two empty cells on each side; do not pick a portrait canvas and leave half
+  of it empty. Render reports `off-center` when a fixed canvas is lopsided;
+  treat it as a defect.
 - **Even steps.** A cell is 56 px; a box is its columns × 56 + 16 px wide and
-  rows × 56 − 4 px tall, centered on its cells. Step side-by-side Nodes by
-  `columns + 3` (5 for 2-wide, 6 for 3-wide) and stacked rows by `rows + 2` or
-  more. Uneven steps make jogged lines.
-- **Width parity on a vertical line.** Nodes that connect top to bottom should
-  share an x center and have the same number of columns (or both odd or both
-  even), so the Edge is straight. A 2-wide under a 3-wide jogs half a cell.
+  rows × 56 − 4 px tall, centered on its cells.
+
+### Route Edges
+
 - **Choose sides when the facing rule would cross something.** Leave
   `fromSide`/`toSide` out for simple neighbors. Pin them when an Edge would
   cut through a box, share a port with another Edge, or double back:
-  - Fan-out to a row below: every Edge `bottom` → `top`, so they share one trunk.
+  - Fan-out or fan-in: every Edge on the same side (`bottom` → `top`, or
+    `right` → `left` for a horizontal fan), so they merge into one trunk. A
+    trunk is the one case where many Edges share a port, and it is the right
+    one: it draws as one line that splits, with one arrowhead per target.
   - A long hop to another row: leave by `right`, enter by `top`, so the line
     runs in the empty band between rows.
   - Loops and detours: same side on both ends (`top` → `top`, `left` → `left`).
     The line brackets half a cell out and goes around, not through.
-  - Never let two Edges end on the same port of one Node. If a loop and a
-    forward Edge both want `delegate`'s top, move one to a bracket on the left.
+  - Never let two Edges from different directions end on the same port with
+    their own arrowheads, and never put a loop return on a port a forward
+    Edge uses. A hub with more than four spokes puts the extra spoke on a
+    diagonal and pins it to join the nearest spoke's trunk for its last cell.
+- **Budget a decision's four sides.** A branch point with an input, a cheap
+  exit, an expensive exit, and a loop return uses all four ports, so decide
+  the ports before placing the branches. Give the return the side on the
+  expensive branch's half of the Diagram; if that side is taken, move the
+  input (bring it in from the left instead of the top) or let both exits
+  leave by one side as a trunk, so the side you want stays free. A return
+  that lands on the empty side of a bi-modal figure destroys the asymmetry.
+  When both exits share a trunk, place the first Node of the expensive
+  branch within one step of the decision, so the trunk splits beside the
+  decision and not across the Diagram.
+- **An actor at both ends is drawn twice.** When the same party starts and
+  ends a flow (the user sends a request and receives the answer), give it a
+  Node at each end of the spine rather than a return Edge around the figure.
+- **Width parity on a vertical line.** Nodes that connect top to bottom share
+  an x center and a column parity (see above), so the Edge is straight.
+
+### Labels, Separators, pulses
+
 - **Label budgets.** About six characters per column fit on a Node label:
   1 column ≈ 5, 2 ≈ 12, 3 ≈ 18. Longer text goes in `description`, which wraps
-  over the box height. Edge labels: two or three words.
-- **Leave room for labels.** An Edge label sits on its longest segment that no
-  other Edge shares, so fan-out labels each land on their own branch. Set
-  `labelPosition` only when a label still collides. Keep the empty band
-  between rows clear.
+  over the box height. Edge labels: two or three words. An Edge label sits on
+  its longest segment that no other Edge shares; a horizontal segment fits
+  about one character per 9 px, so a label on a short stub truncates. Widen
+  the step or shorten the label.
+- **The center branch of a fan has no segment of its own.** It runs straight
+  through the trunk junction, so its label lands at the junction on top of the
+  trunk, and `labelPosition` cannot move it. Leave that Edge unlabeled and put
+  the text in the child's `description`, or label only the outer branches.
+- **Leave room for labels.** Set `labelPosition` only when a label still
+  collides. Keep the empty band between rows clear.
 - **Separators for boundaries.** A dashed Separator marks a trust or cloud
   boundary ("AWS", "VPC", "public / private"); a solid one marks tiers or
   lanes. Run it through the empty band between rows or columns, never through
-  a Node. Span only the Nodes it divides, plus one cell: start one cell before
-  the first Node's footprint and end one cell after the last (Nodes at
-  x = 3 to 20 → `from.x` 2, `to.x` 21), not the full canvas. Its label sits
-  at `from`, so a long line pushes the label away from what it names.
+  a Node, and not on the row a trunk runs along (a trunk on the Separator's
+  line hides it; give the band one more row). Span only the Nodes it divides,
+  plus one cell: start one cell before the first Node's footprint and end one
+  cell after the last (Nodes at x = 3 to 20 → `from.x` 2, `to.x` 21), not the
+  full canvas. Its label sits at `from`, so a long line pushes the label away
+  from what it names.
 - **Pulses sparingly.** Pulse only flows the person asked to highlight, or the
   few that tell the story: `both` for request and response or two-way traffic,
   `forward` for a one-way stream or a scheduled push. Pulse no more than about
-  a third of the Edges.
-- **Pick a canvas for a finished Diagram.** 24×15 suits a three-tier
-  architecture; 16×10 suits a short flow. Portrait (10×16, 15×24) suits a tall
-  pipeline.
+  a third of the Edges, except a hub whose point is two-way traffic, where
+  every spoke may pulse `both`.
 
 ## Loop
 
 1. Read the Manifest. If it does not exist, start from `{"nodes":[],"edges":[]}`.
-2. Make the requested change as the smallest JSON diff that does it.
+2. For a new Diagram, name its shape (see Shape first) and the axis parity
+   before writing any Node. For a change, make the smallest JSON diff that
+   does it and keeps the existing shape.
 3. Render:
    ```bash
    skema render --manifest <path>.json --svg <path>.svg
@@ -182,9 +261,11 @@ them when you place Nodes or add Edges.
    ```bash
    skema render --manifest <path>.json --svg <path>.svg --png <scratch>/check.png
    ```
-   Check for lines through boxes, two arrowheads on one port, Edges running
-   along each other, labels on top of lines or boxes, and that every Edge ends
-   in a visible arrowhead. Fix each with the
+   Check first that the shape you chose is visible: the axis is straight,
+   mirrored Nodes sit at equal distances, and a bi-modal figure has its
+   weight on one side. Then check for lines through boxes, two arrowheads on
+   one port, Edges running along each other, labels on top of lines or boxes,
+   and that every Edge ends in a visible arrowhead. Fix each with the
    Layout rules and render again. Expect a second pass on any new Diagram of
    more than a few Nodes; do not report a Diagram you have not looked at.
 6. Report the Nodes and Edges you changed, the Validation outcome, and both

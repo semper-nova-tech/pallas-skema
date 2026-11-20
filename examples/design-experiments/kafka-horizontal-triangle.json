@@ -1,0 +1,20 @@
+{
+  "canvas": { "columns": 19, "rows": 10 },
+  "nodes": [
+    { "id": "web", "label": "Web app", "description": "producer", "type": "process", "size": "medium", "gridPosition": { "x": 2, "y": 1 } },
+    { "id": "mobile", "label": "Mobile app", "description": "producer", "type": "process", "size": "medium", "gridPosition": { "x": 2, "y": 4 } },
+    { "id": "batch", "label": "Batch import", "description": "producer", "type": "process", "size": "medium", "gridPosition": { "x": 2, "y": 7 } },
+    { "id": "topic", "label": "orders", "description": "Kafka topic", "type": "process", "size": { "columns": 2, "rows": 2 }, "gridPosition": { "x": 8, "y": 3 } },
+    { "id": "fraud", "label": "Fraud check", "description": "consumer group", "type": "process", "size": "medium", "gridPosition": { "x": 14, "y": 1 } },
+    { "id": "fulfil", "label": "Fulfilment", "description": "consumer group", "type": "process", "size": "medium", "gridPosition": { "x": 14, "y": 4 } },
+    { "id": "analytics", "label": "Analytics", "description": "consumer group", "type": "process", "size": "medium", "gridPosition": { "x": 14, "y": 7 } }
+  ],
+  "edges": [
+    { "from": "web", "to": "topic", "label": "produce", "fromSide": "right", "toSide": "left" },
+    { "from": "mobile", "to": "topic", "fromSide": "right", "toSide": "left" },
+    { "from": "batch", "to": "topic", "fromSide": "right", "toSide": "left" },
+    { "from": "topic", "to": "fraud", "label": "fraud-cg", "fromSide": "right", "toSide": "left", "pulse": "forward" },
+    { "from": "topic", "to": "fulfil", "label": "fulfil-cg", "fromSide": "right", "toSide": "left", "pulse": "forward" },
+    { "from": "topic", "to": "analytics", "label": "analytics-cg", "fromSide": "right", "toSide": "left", "pulse": "forward" }
+  ]
+}

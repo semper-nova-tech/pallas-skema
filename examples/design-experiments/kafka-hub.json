@@ -1,0 +1,109 @@
+{
+  "canvas": {
+    "columns": 24,
+    "rows": 14
+  },
+  "nodes": [
+    {
+      "id": "broker",
+      "label": "Kafka cluster",
+      "description": "3 brokers, replicated topics",
+      "type": "process",
+      "size": {
+        "columns": 3,
+        "rows": 3
+      },
+      "gridPosition": {
+        "x": 10,
+        "y": 5
+      }
+    },
+    {
+      "id": "api",
+      "label": "API gateway",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 5,
+        "y": 6
+      }
+    },
+    {
+      "id": "cron",
+      "label": "Scheduled jobs",
+      "type": "process",
+      "size": "large",
+      "gridPosition": {
+        "x": 10,
+        "y": 1
+      }
+    },
+    {
+      "id": "search",
+      "label": "Search indexer",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 16,
+        "y": 6
+      }
+    },
+    {
+      "id": "lake",
+      "label": "Data lake sink",
+      "type": "process",
+      "size": "large",
+      "gridPosition": {
+        "x": 10,
+        "y": 11
+      }
+    },
+    {
+      "id": "schema",
+      "label": "Schema",
+      "type": "process",
+      "size": "medium",
+      "gridPosition": {
+        "x": 15,
+        "y": 2
+      },
+      "description": "registry"
+    }
+  ],
+  "edges": [
+    {
+      "from": "api",
+      "to": "broker",
+      "label": "produce",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "cron",
+      "to": "broker",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "broker",
+      "to": "search",
+      "label": "consume",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "broker",
+      "to": "lake",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "schema",
+      "to": "broker",
+      "label": "validate",
+      "pulse": "both",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ]
+}

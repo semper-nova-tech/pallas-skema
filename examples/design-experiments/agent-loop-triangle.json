@@ -1,0 +1,18 @@
+{
+  "canvas": { "columns": 15, "rows": 14 },
+  "nodes": [
+    { "id": "msg", "label": "User message", "type": "process", "size": "medium", "gridPosition": { "x": 6, "y": 1 } },
+    { "id": "decide", "label": "Decide", "type": "decision", "size": "medium", "gridPosition": { "x": 6, "y": 4 } },
+    { "id": "skip", "label": "Draft reply directly", "type": "process", "size": { "columns": 3, "rows": 2 }, "gridPosition": { "x": 2, "y": 7 } },
+    { "id": "tools", "label": "Run tool loop", "description": "pick, call, observe; repeat until done", "type": "process", "size": { "columns": 3, "rows": 2 }, "gridPosition": { "x": 9, "y": 7 } },
+    { "id": "respond", "label": "Respond", "type": "process", "size": "medium", "gridPosition": { "x": 6, "y": 11 } }
+  ],
+  "edges": [
+    { "from": "msg", "to": "decide" },
+    { "from": "decide", "to": "skip", "label": "skip", "fromSide": "bottom", "toSide": "top" },
+    { "from": "decide", "to": "tools", "label": "loop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "skip", "to": "respond", "fromSide": "bottom", "toSide": "top" },
+    { "from": "tools", "to": "respond", "fromSide": "bottom", "toSide": "top" },
+    { "from": "tools", "to": "decide", "label": "again", "fromSide": "right", "toSide": "right" }
+  ]
+}

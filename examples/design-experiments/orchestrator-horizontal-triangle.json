@@ -1,0 +1,23 @@
+{
+  "canvas": { "columns": 25, "rows": 15 },
+  "nodes": [
+    { "id": "orch", "label": "Orchestrator", "description": "Plans the run, fans out work", "type": "process", "size": { "columns": 3, "rows": 2 }, "gridPosition": { "x": 2, "y": 6 } },
+    { "id": "a1", "label": "Frontend build", "type": "process", "size": "large", "gridPosition": { "x": 8, "y": 2 } },
+    { "id": "a2", "label": "Backend build", "type": "process", "size": "large", "gridPosition": { "x": 8, "y": 5 } },
+    { "id": "a3", "label": "Infra build", "type": "process", "size": "large", "gridPosition": { "x": 8, "y": 8 } },
+    { "id": "a4", "label": "Ponytail review", "type": "process", "size": "large", "gridPosition": { "x": 8, "y": 11 } },
+    { "id": "store", "label": "Run state", "type": "process", "size": { "columns": 2, "rows": 2 }, "gridPosition": { "x": 14, "y": 6 } },
+    { "id": "final", "label": "Final report", "description": "Coverage, checks, risks", "type": "process", "size": { "columns": 3, "rows": 2 }, "gridPosition": { "x": 19, "y": 6 } }
+  ],
+  "edges": [
+    { "from": "orch", "to": "a1", "label": "frontend", "fromSide": "right", "toSide": "left" },
+    { "from": "orch", "to": "a2", "label": "backend", "fromSide": "right", "toSide": "left" },
+    { "from": "orch", "to": "a3", "label": "infra", "fromSide": "right", "toSide": "left" },
+    { "from": "orch", "to": "a4", "label": "review", "fromSide": "right", "toSide": "left" },
+    { "from": "a1", "to": "store", "fromSide": "right", "toSide": "left" },
+    { "from": "a2", "to": "store", "fromSide": "right", "toSide": "left" },
+    { "from": "a3", "to": "store", "fromSide": "right", "toSide": "left" },
+    { "from": "a4", "to": "store", "fromSide": "right", "toSide": "left" },
+    { "from": "store", "to": "final", "fromSide": "right", "toSide": "left", "pulse": "forward" }
+  ]
+}

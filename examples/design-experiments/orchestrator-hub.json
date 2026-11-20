@@ -1,0 +1,24 @@
+{
+  "canvas": { "columns": 16, "rows": 13 },
+  "nodes": [
+    { "id": "orch", "label": "Orchestrator", "type": "process",
+      "size": { "columns": 3, "rows": 2 }, "gridPosition": { "x": 6, "y": 5 } },
+    { "id": "research", "label": "Research agent", "type": "process",
+      "size": "large", "gridPosition": { "x": 6, "y": 1 } },
+    { "id": "code", "label": "Coding agent", "type": "process",
+      "size": { "columns": 2, "rows": 2 }, "gridPosition": { "x": 12, "y": 5 } },
+    { "id": "test", "label": "Test agent", "type": "process",
+      "size": "large", "gridPosition": { "x": 6, "y": 10 } },
+    { "id": "docs", "label": "Docs agent", "type": "process",
+      "size": { "columns": 2, "rows": 2 }, "gridPosition": { "x": 1, "y": 5 } },
+    { "id": "human", "label": "Human", "type": "process",
+      "size": { "columns": 1, "rows": 1 }, "gridPosition": { "x": 3, "y": 2 } }
+  ],
+  "edges": [
+    { "from": "orch", "to": "research", "label": "research", "pulse": "both" },
+    { "from": "orch", "to": "code", "label": "implement", "pulse": "both" },
+    { "from": "orch", "to": "test", "label": "verify", "pulse": "both" },
+    { "from": "orch", "to": "docs", "label": "document", "pulse": "both" },
+    { "from": "human", "to": "orch", "label": "goal" }
+  ]
+}
