@@ -146,11 +146,39 @@ mirrored Edges take the same route.
   suits an even number of siblings, where no sibling is on the axis. Never
   inflate one sibling to match the apex; mirrored siblings always share one
   footprint.
-- **Footprint by meaning, within parity.** 2×1 for a service or step; 2×2 for
-  a data store or queue; 3×1 for a gateway or wide hub; 1×1 for a small
-  marker or an external actor with a label of five characters or fewer; 3×2
-  or 3×3 for a hub or a Node with a long description. Keep one footprint per
-  row unless meaning needs another.
+- **Straighten every Edge that can be straight, not only the spine.** An Edge
+  whose two Nodes face each other (`bottom` → `top` with one above the other,
+  or `right` → `left` with one beside the other) draws straight only when
+  their centers coincide across the Edge: center x = `x + columns / 2` for a
+  vertical Edge, center y = `y + rows / 2` for a horizontal one. Otherwise it
+  jogs: a bend halfway along a line that had no reason to turn. Check every
+  such Edge, branches included, and fix it in this order:
+  1. Parity already agrees (both widths odd, or both even) but the centers
+     differ: move one Node, usually the one with fewer other Edges.
+  2. Parity differs: grow the smaller Node by one cell across the Edge (a 2×1
+     over a 3×2 becomes 3×1; a 2×1 beside a 2×2 becomes 2×2), then align.
+
+  Leave the jog only when the fix would overlap a footprint, break a mirrored
+  sibling set or the apex rule above, run past a fixed canvas, leave a band
+  between rows or columns with no empty cell, or lay one Edge on top of
+  another. That last one is easy to miss: a Node moved under another Node's
+  port can pull a third Node's Edge onto the same line, so render and look.
+  When you move a Node along a chain, move the Nodes after it by the same
+  amount so the steps stay even; a gap left behind reads as a break. Never
+  shrink a Node below its label budget to straighten an Edge. Some bends are
+  real: an Edge that leaves
+  `left` and enters `top`, or joins Nodes in different rows and columns, turns
+  by design; this rule is for the ones that need not.
+  Example: a 2×1 decision at (2, 7) over a 3×2 step at (2, 10) has centers 3
+  and 3.5, so the `bottom` → `top` Edge jogs. Make the decision 3×1 at (2, 7).
+  A 3×2 step at y = 10 with `right` → `left` into a 2×2 at y = 13 has row
+  centers 11 and 14; parity agrees, so move the 2×2 to y = 10.
+- **Footprint by meaning, within parity and alignment.** 2×1 for a service or
+  step; 2×2 for a data store or queue; 3×1 for a gateway or wide hub; 1×1 for
+  a small marker or an external actor with a label of five characters or
+  fewer; 3×2 or 3×3 for a hub or a Node with a long description. Meaning sets
+  the smallest footprint; a Node may grow by one cell to straighten an Edge
+  (see above). Keep one footprint per row unless meaning needs another.
 - **Step siblings so their center lands on the axis.** `k` siblings of width
   `w` stepped by `s` have their center at `x0 + ((k − 1)·s + w) / 2`. Choose
   `s` so that equals the spine's center: a 3-wide spine wants an odd total
@@ -201,8 +229,11 @@ mirrored Edges take the same route.
 - **An actor at both ends is drawn twice.** When the same party starts and
   ends a flow (the user sends a request and receives the answer), give it a
   Node at each end of the spine rather than a return Edge around the figure.
-- **Width parity on a vertical line.** Nodes that connect top to bottom share
-  an x center and a column parity (see above), so the Edge is straight.
+- **Parity on every facing Edge.** Nodes that connect top to bottom share an
+  x center and a column parity; Nodes that connect side to side share a y
+  center and a row parity, so a 1-row step beside a 2-row store jogs. Same
+  parity is not enough: one cell of offset jogs too (see Straighten every
+  Edge).
 
 ### Labels, Separators, pulses
 
@@ -238,7 +269,9 @@ mirrored Edges take the same route.
 1. Read the Manifest. If it does not exist, start from `{"nodes":[],"edges":[]}`.
 2. For a new Diagram, name its shape (see Shape first) and the axis parity
    before writing any Node. For a change, make the smallest JSON diff that
-   does it and keeps the existing shape.
+   does it and keeps the existing shape. Then, for every Edge whose Nodes
+   face each other, compare the two centers across the Edge and straighten
+   any that differ (see Straighten every Edge).
 3. Render:
    ```bash
    skema render --manifest <path>.json --svg <path>.svg
@@ -263,7 +296,8 @@ mirrored Edges take the same route.
    ```
    Check first that the shape you chose is visible: the axis is straight,
    mirrored Nodes sit at equal distances, and a bi-modal figure has its
-   weight on one side. Then check for lines through boxes, two arrowheads on
+   weight on one side. Then check for a bend in an Edge between two Nodes
+   that sit in one column or one row, lines through boxes, two arrowheads on
    one port, Edges running along each other, labels on top of lines or boxes,
    and that every Edge ends in a visible arrowhead. Fix each with the
    Layout rules and render again. Expect a second pass on any new Diagram of
